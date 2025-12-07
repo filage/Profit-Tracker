@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Учет покупок и продаж</title>
+    <link rel="stylesheet" href="styles.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+    <div class="container">
+        <header class="header">
+            <h1>Трекер Прибыли</h1>
+        </header>
+
+        <!-- Навигация -->
+        <nav class="nav-tabs">
+            <button class="nav-tab active" data-tab="graph">
+                <span class="tab-icon">📊</span> График
+            </button>
+            <button class="nav-tab" data-tab="calendar">
+                <span class="tab-icon">📅</span> Календарь
+            </button>
+            <button class="nav-tab" data-tab="rate">
+                <span class="tab-icon">💱</span> Курс юаня
+            </button>
+        </nav>
+
+        <!-- Секция графика -->
+        <section id="graph" class="tab-content active">
+            <!-- График прибыли -->
+            <div class="chart-section">
+                <div class="chart-controls">
+                    <div class="chart-buttons">
+                        <button class="chart-btn" id="togglePointsBtn">⚫ ТОЧКИ</button>
+                    </div>
+                    <div class="period-buttons">
+                        <button class="period-btn" data-period="1">1 день</button>
+                        <button class="period-btn" data-period="7">7 дней</button>
+                        <button class="period-btn active" data-period="30">30 дней</button>
+                        <button class="period-btn" data-period="365">Год</button>
+                    </div>
+                </div>
+                <div class="chart-container">
+                    <canvas id="profitChart"></canvas>
+                </div>
+            </div>
+
+            <div class="controls">
+                <div class="control-row">
+                    <div class="item-selector">
+                        <label>Тип вещи:</label>
+                        <select id="itemTypeFilter">
+                            <option value="all">Все</option>
+                        </select>
+                        <button id="manageItemsBtn" class="btn-icon" title="Управление типами">⚙️</button>
+                    </div>
+                    <div class="equalize-toggle">
+                        <span>Приравнять покупки к продажам</span>
+                        <label class="switch">
+                            <input type="checkbox" id="equalizeToggle">
+                            <span class="slider"></span>
+                        </label>
+                    </div>
+                </div>
+                <div class="control-row">
+                    <div class="date-filter">
+                        <label>Период:</label>
+                        <input type="date" id="dateFrom" placeholder="С">
+                        <span>—</span>
+                        <input type="date" id="dateTo" placeholder="По">
+                        <button id="resetDatesBtn" class="btn-small">Сброс</button>
+                    </div>
+                    <div class="data-buttons">
+                        <button id="exportBtn" class="btn-small btn-export">📤 Экспорт</button>
+                        <button id="importBtn" class="btn-small btn-import">📥 Импорт</button>
+                        <input type="file" id="importFile" accept=".json" style="display:none">
+                    </div>
+                </div>
+            </div>
+
+            <div class="stats-cards">
+                <div class="stat-card income">
+                    <div class="stat-icon">💰</div>
+                    <div class="stat-info">
+                        <h3>ДОХОД</h3>
+                        <p class="amount" id="totalIncome">0 ₽</p>
+                        <p class="quantity">Продано: <span id="totalSold">0</span> шт.</p>
+                    </div>
+                </div>
+                <div class="stat-card expense">
+                    <div class="stat-icon">💸</div>
+                    <div class="stat-info">
+                        <h3>РАСХОД</h3>
+                        <p class="amount" id="totalExpense">0 ₽</p>
+                        <p class="quantity">Куплено: <span id="totalBought">0</span> шт.</p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="profit-display">
+                <div class="profit-label">ЧИСТАЯ ПРИБЫЛЬ</div>
+                <div class="profit-amount" id="totalProfit">0 ₽</div>
+            </div>
+
+            <div class="item-stats" id="itemStats">
+                <!-- Статистика по каждому типу вещей -->
+            </div>
+        </section>
+
+        <!-- Секция календаря -->
+        <section id="calendar" class="tab-content">
+            <div class="calendar-header">
+                <button id="prevMonth" class="btn-nav">◀</button>
+                <h2 id="currentMonth"></h2>
+                <button id="nextMonth" class="btn-nav">▶</button>
+            </div>
+            <div class="calendar-grid" id="calendarGrid">
+                <div class="weekday">Пн</div>
+                <div class="weekday">Вт</div>
+                <div class="weekday">Ср</div>
+                <div class="weekday">Чт</div>
+                <div class="weekday">Пт</div>
+                <div class="weekday">Сб</div>
+                <div class="weekday">Вс</div>
+            </div>
+            <div id="dayDetails" class="day-details hidden">
+                <h3>Детали дня: <span id="selectedDate"></span></h3>
+                <p>Курс юаня: <span id="dayRate">—</span></p>
+                <div id="dayTransactions"></div>
+            </div>
+        </section>
+
+        <!-- Секция курса юаня -->
+        <section id="rate" class="tab-content">
+            <h2>Курс юаня к рублю</h2>
+            <div class="rate-form">
+                <div class="form-group">
+                    <label>Курс (1 юань = X рублей):</label>
+                    <input type="number" id="rateValue" step="0.01" placeholder="Например: 12.5">
+                </div>
+                <div class="form-group">
+                    <label>Дата:</label>
+                    <input type="date" id="rateDate">
+                </div>
+                <button id="saveRateBtn" class="btn-primary">Сохранить курс</button>
+            </div>
+            <div class="rate-history">
+                <h3>История курсов</h3>
+                <div id="rateList"></div>
+            </div>
+        </section>
+
+        <!-- Кнопки добавления -->
+        <div class="action-buttons">
+            <button id="addSaleBtn" class="btn-action btn-income">+ Добавить продажу</button>
+            <button id="addPurchaseBtn" class="btn-action btn-expense">+ Добавить покупку</button>
+        </div>
+    </div>
+
+    <!-- Модальное окно добавления покупки -->
+    <div id="purchaseModal" class="modal hidden">
+        <div class="modal-content">
+            <span class="close-modal">&times;</span>
+            <h2>ДОБАВИТЬ ПОКУПКУ</h2>
+            <form id="purchaseForm">
+                <div class="form-group">
+                    <label>Тип вещи:</label>
+                    <select id="purchaseItemType" required></select>
+                </div>
+                <div class="form-group">
+                    <label>Дата:</label>
+                    <input type="date" id="purchaseDate" required>
+                </div>
+                <div class="form-group">
+                    <label>Валюта:</label>
+                    <select id="purchaseCurrency">
+                        <option value="RUB">Рубли (₽)</option>
+                        <option value="CNY">Юани (¥)</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Количество:</label>
+                    <input type="number" id="purchaseQuantity" min="1" required>
+                </div>
+                <div class="form-group">
+                    <label>Сумма:</label>
+                    <input type="number" id="purchaseAmount" step="0.01" required>
+                </div>
+                <button type="submit" class="btn-primary">Добавить</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Модальное окно добавления продажи -->
+    <div id="saleModal" class="modal hidden">
+        <div class="modal-content">
+            <span class="close-modal">&times;</span>
+            <h2>ДОБАВИТЬ ПРОДАЖУ</h2>
+            <form id="saleForm">
+                <div class="form-group">
+                    <label>Тип вещи:</label>
+                    <select id="saleItemType" required></select>
+                </div>
+                <div class="form-group">
+                    <label>Дата:</label>
+                    <input type="date" id="saleDate" required>
+                </div>
+                <div class="form-group">
+                    <label>Валюта:</label>
+                    <select id="saleCurrency">
+                        <option value="RUB">Рубли (₽)</option>
+                        <option value="CNY">Юани (¥)</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Количество:</label>
+                    <input type="number" id="saleQuantity" min="1" required>
+                </div>
+                <div class="form-group">
+                    <label>Сумма:</label>
+                    <input type="number" id="saleAmount" step="0.01" required>
+                </div>
+                <button type="submit" class="btn-primary">Добавить</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Модальное окно управления типами вещей -->
+    <div id="itemsModal" class="modal hidden">
+        <div class="modal-content">
+            <span class="close-modal">&times;</span>
+            <h2>Управление типами вещей</h2>
+            <div class="form-group">
+                <label>Добавить новый тип:</label>
+                <div class="add-item-row">
+                    <input type="text" id="newItemName" placeholder="Название">
+                    <button id="addItemTypeBtn" class="btn-primary">Добавить</button>
+                </div>
+            </div>
+            <div class="items-list" id="itemTypesList"></div>
+        </div>
+    </div>
+
+    <!-- Модальное окно редактирования типа -->
+    <div id="editItemModal" class="modal hidden">
+        <div class="modal-content">
+            <span class="close-modal">&times;</span>
+            <h2>Редактировать тип вещи</h2>
+            <div class="form-group">
+                <label>Название:</label>
+                <input type="text" id="editItemName">
+                <input type="hidden" id="editItemIndex">
+            </div>
+            <button id="saveItemEditBtn" class="btn-primary">Сохранить</button>
+        </div>
+    </div>
+
+    <!-- Модальное окно детализации -->
+    <div id="detailsModal" class="modal hidden">
+        <div class="modal-content modal-wide">
+            <span class="close-modal">&times;</span>
+            <h2 id="detailsTitle">Детализация</h2>
+            <div class="details-summary" id="detailsSummary"></div>
+            <div class="details-list" id="detailsList"></div>
+        </div>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>
