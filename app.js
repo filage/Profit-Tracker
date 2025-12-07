@@ -60,7 +60,11 @@ function initTabs() {
     });
 
     // Переключатель приравнивания
-    document.getElementById('equalizeToggle').addEventListener('change', updateStats);
+    document.getElementById('equalizeToggle').addEventListener('change', () => {
+        updateStats();
+        updateChart();
+        renderCalendar();
+    });
     
     // Фильтр по типу
     document.getElementById('itemTypeFilter').addEventListener('change', updateStats);
@@ -571,12 +575,19 @@ function renderCalendar() {
     }
 }
 
-// Расчет прибыли за день (с автоматическим приравниванием и динамическим курсом)
+// Расчет прибыли за день (для графика/календаря)
 function calculateDayProfit(dateStr) {
     const daySales = data.sales.filter(s => s.date === dateStr);
+    const dayPurchases = data.purchases.filter(p => p.date === dateStr);
     
-    if (daySales.length === 0) {
+    // Нет ни продаж, ни покупок — нет данных для дня
+    if (daySales.length === 0 && dayPurchases.length === 0) {
         return { hasData: false, profit: 0 };
+    }
+    
+    // Только покупки (инвестиция ещё не реализована) — отмечаем день, но прибыль считаем как 0
+    if (daySales.length === 0 && dayPurchases.length > 0) {
+        return { hasData: true, profit: 0 };
     }
     
     let totalIncome = 0;
@@ -626,8 +637,9 @@ function showDayDetails(dateStr) {
     container.innerHTML = '';
     
     const daySales = data.sales.filter(s => s.date === dateStr);
+    const dayPurchases = data.purchases.filter(p => p.date === dateStr);
     
-    if (daySales.length === 0) {
+    if (daySales.length === 0 && dayPurchases.length === 0) {
         container.innerHTML = '<p style="color: var(--text-secondary);">Нет транзакций за этот день</p>';
         return;
     }
@@ -639,6 +651,17 @@ function showDayDetails(dateStr) {
             <span>${sale.itemType}</span>
             <span>${sale.quantity} шт.</span>
             <span>${formatMoney(getAmountInRub(sale))}</span>
+        `;
+        container.appendChild(div);
+    });
+    
+    dayPurchases.forEach(purchase => {
+        const div = document.createElement('div');
+        div.className = 'transaction-item expense';
+        div.innerHTML = `
+            <span>${purchase.itemType}</span>
+            <span>${purchase.quantity} шт.</span>
+            <span>-${formatMoney(getAmountInRub(purchase))}</span>
         `;
         container.appendChild(div);
     });
@@ -795,9 +818,16 @@ function updateChart() {
     
     for (let i = chartPeriod - 1; i >= 0; i--) {
         const date = new Date(today);
+        // работаем с локальной датой без сдвига по таймзоне
+        date.setHours(0, 0, 0, 0);
         date.setDate(date.getDate() - i);
-        const dateStr = date.toISOString().split('T')[0];
-        
+
+        const dateStr = [
+            date.getFullYear(),
+            String(date.getMonth() + 1).padStart(2, '0'),
+            String(date.getDate()).padStart(2, '0')
+        ].join('-');
+
         const dayData = calculateDayProfit(dateStr);
         
         labels.push(date.toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' }));
