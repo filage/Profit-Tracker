@@ -508,8 +508,10 @@ input:checked + .slider:before {
     margin-top: 2px;
 }
 
-.calendar-day .day-profit.positive { color: var(--accent-green); }
-.calendar-day .day-profit.negative { color: var(--accent-red); }
+.calendar-day .day-profit.positive,
+.calendar-day .day-profit.day-profit-pos { color: var(--accent-green); }
+.calendar-day .day-profit.negative,
+.calendar-day .day-profit.day-profit-neg { color: var(--accent-red); }
 
 /* Детали дня */
 .day-details {
@@ -522,8 +524,42 @@ input:checked + .slider:before {
 
 .day-details.hidden { display: none; }
 
+.day-details-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 12px;
+}
+
 .day-details h3 {
     font-size: 18px;
+    margin: 0;
+}
+
+.close-day-details {
+    width: 32px;
+    height: 32px;
+    border-radius: 8px;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    color: var(--text-secondary);
+    cursor: pointer;
+    font-size: 16px;
+    transition: all 0.3s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.close-day-details:hover {
+    background: var(--bg-hover);
+    color: var(--text-primary);
+    border-color: var(--accent-red);
+}
+
+.day-rate-info {
+    color: var(--text-secondary);
+    font-size: 13px;
     margin-bottom: 16px;
 }
 
@@ -802,15 +838,47 @@ input:checked + .slider:before {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding: 14px 16px;
+    padding: 12px 14px;
     background: var(--bg-secondary);
     border-radius: 12px;
     margin-bottom: 10px;
     border-left: 4px solid;
+    gap: 10px;
+    flex-wrap: wrap;
 }
 
 .transaction-item.sale { border-left-color: var(--accent-green); }
-.transaction-item.purchase { border-left-color: var(--accent-red); }
+.transaction-item.expense { border-left-color: var(--accent-red); }
+
+.transaction-item span {
+    font-size: 13px;
+}
+
+.transaction-item .day-edit,
+.transaction-item .day-delete {
+    border: none;
+    color: #fff;
+    padding: 6px 10px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 11px;
+    font-weight: 600;
+    transition: all 0.3s ease;
+}
+
+.transaction-item .day-edit {
+    background: var(--gradient-blue);
+}
+
+.transaction-item .day-delete {
+    background: var(--gradient-red);
+}
+
+.transaction-item .day-edit:hover,
+.transaction-item .day-delete:hover {
+    transform: scale(1.05);
+    opacity: 0.9;
+}
 
 /* Модальное окно детализации */
 .modal-wide {
@@ -902,14 +970,15 @@ input:checked + .slider:before {
 
 .detail-item .detail-actions {
     display: flex;
-    gap: 8px;
+    gap: 6px;
+    flex-shrink: 0;
 }
 
+.detail-item .edit-btn,
 .detail-item .delete-btn {
-    background: var(--gradient-red);
     border: none;
     color: #fff;
-    padding: 6px 12px;
+    padding: 6px 10px;
     border-radius: 6px;
     cursor: pointer;
     font-size: 11px;
@@ -917,8 +986,18 @@ input:checked + .slider:before {
     transition: all 0.3s ease;
 }
 
+.detail-item .edit-btn {
+    background: var(--gradient-blue);
+}
+
+.detail-item .delete-btn {
+    background: var(--gradient-red);
+}
+
+.detail-item .edit-btn:hover,
 .detail-item .delete-btn:hover {
     transform: scale(1.05);
+    opacity: 0.9;
 }
 
 /* Фильтр по датам */

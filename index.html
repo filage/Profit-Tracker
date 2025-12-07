@@ -64,6 +64,9 @@
                         </label>
                     </div>
                 </div>
+            </div>
+
+            <div class="controls filter-row">
                 <div class="control-row">
                     <div class="date-filter">
                         <label>Период:</label>
@@ -126,8 +129,11 @@
                 <div class="weekday">Вс</div>
             </div>
             <div id="dayDetails" class="day-details hidden">
-                <h3>Детали дня: <span id="selectedDate"></span></h3>
-                <p>Курс юаня: <span id="dayRate">—</span></p>
+                <div class="day-details-header">
+                    <h3>Детали дня: <span id="selectedDate"></span></h3>
+                    <button class="close-day-details" id="closeDayDetails">✕</button>
+                </div>
+                <p class="day-rate-info">Курс юаня: <span id="dayRate">—</span></p>
                 <div id="dayTransactions"></div>
             </div>
         </section>

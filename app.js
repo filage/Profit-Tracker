@@ -70,12 +70,19 @@ function initTabs() {
     document.getElementById('itemTypeFilter').addEventListener('change', updateStats);
     
     // Фильтр по датам
-    document.getElementById('dateFrom').addEventListener('change', updateStats);
-    document.getElementById('dateTo').addEventListener('change', updateStats);
+    document.getElementById('dateFrom').addEventListener('change', () => {
+        updateStats();
+        updateChart();
+    });
+    document.getElementById('dateTo').addEventListener('change', () => {
+        updateStats();
+        updateChart();
+    });
     document.getElementById('resetDatesBtn').addEventListener('click', () => {
         document.getElementById('dateFrom').value = '';
         document.getElementById('dateTo').value = '';
         updateStats();
+        updateChart();
     });
     
     // Экспорт данных
@@ -523,6 +530,11 @@ function initCalendar() {
         renderCalendar();
     });
     
+    // Закрытие деталей дня
+    document.getElementById('closeDayDetails').addEventListener('click', () => {
+        document.getElementById('dayDetails').classList.add('hidden');
+    });
+    
     renderCalendar();
 }
 
@@ -883,26 +895,49 @@ function initChart() {
 function updateChart() {
     if (!profitChart) return;
     
-    const today = new Date();
+    const dateFrom = document.getElementById('dateFrom').value;
+    const dateTo = document.getElementById('dateTo').value;
+    
     const labels = [];
     const profits = [];
     
-    for (let i = chartPeriod - 1; i >= 0; i--) {
-        const date = new Date(today);
-        // работаем с локальной датой без сдвига по таймзоне
-        date.setHours(0, 0, 0, 0);
-        date.setDate(date.getDate() - i);
-
-        const dateStr = [
-            date.getFullYear(),
-            String(date.getMonth() + 1).padStart(2, '0'),
-            String(date.getDate()).padStart(2, '0')
-        ].join('-');
-
-        const dayData = calculateDayProfit(dateStr);
+    // Если заданы даты фильтра — используем их диапазон
+    if (dateFrom && dateTo) {
+        const start = new Date(dateFrom);
+        const end = new Date(dateTo);
+        start.setHours(0, 0, 0, 0);
+        end.setHours(0, 0, 0, 0);
         
-        labels.push(date.toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' }));
-        profits.push(dayData.profit);
+        for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
+            const dateStr = [
+                d.getFullYear(),
+                String(d.getMonth() + 1).padStart(2, '0'),
+                String(d.getDate()).padStart(2, '0')
+            ].join('-');
+            
+            const dayData = calculateDayProfit(dateStr);
+            labels.push(d.toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' }));
+            profits.push(dayData.profit);
+        }
+    } else {
+        // Иначе используем период (7/30/365 дней)
+        const today = new Date();
+        for (let i = chartPeriod - 1; i >= 0; i--) {
+            const date = new Date(today);
+            date.setHours(0, 0, 0, 0);
+            date.setDate(date.getDate() - i);
+
+            const dateStr = [
+                date.getFullYear(),
+                String(date.getMonth() + 1).padStart(2, '0'),
+                String(date.getDate()).padStart(2, '0')
+            ].join('-');
+
+            const dayData = calculateDayProfit(dateStr);
+            
+            labels.push(date.toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' }));
+            profits.push(dayData.profit);
+        }
     }
     
     profitChart.data.labels = labels;
