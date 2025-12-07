@@ -557,80 +557,88 @@ function renderCalendar() {
     // Дни месяца
     for (let day = 1; day <= lastDay.getDate(); day++) {
         const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
-        const dayProfit = calculateDayProfit(dateStr);
+        const dayData = calculateDayProfit(dateStr);
         
         const dayEl = document.createElement('div');
         dayEl.className = 'calendar-day';
-        if (dayProfit.hasData) {
+        if (dayData.hasData) {
             dayEl.classList.add('has-data');
+        }
+        
+        let profitHtml = '';
+        if (dayData.hasData && dayData.profit !== 0) {
+            const profitClass = dayData.profit >= 0 ? 'day-profit-pos' : 'day-profit-neg';
+            const sign = dayData.profit >= 0 ? '+' : '-';
+            const absProfit = Math.abs(dayData.profit);
+            profitHtml = `<span class="day-profit ${profitClass}">${sign}${formatMoney(absProfit)}</span>`;
         }
         
         dayEl.innerHTML = `
             <span class="day-number">${day}</span>
-            ${dayProfit.hasData ? `<span class="day-profit ${dayProfit.profit >= 0 ? 'positive' : 'negative'}">${dayProfit.profit >= 0 ? '+' : ''}${dayProfit.profit.toFixed(0)}₽</span>` : ''}
+            ${profitHtml}
         `;
         
-        dayEl.addEventListener('click', () => showDayDetails(dateStr));
+        if (dayData.hasData) {
+            dayEl.addEventListener('click', () => {
+                showDayDetails(dateStr);
+            });
+        }
+        
         grid.appendChild(dayEl);
     }
 }
 
-// Расчет прибыли за день (для графика/календаря)
 function calculateDayProfit(dateStr) {
     const daySales = data.sales.filter(s => s.date === dateStr);
     const dayPurchases = data.purchases.filter(p => p.date === dateStr);
     
-    // Нет ни продаж, ни покупок — нет данных для дня
-    if (daySales.length === 0 && dayPurchases.length === 0) {
-        return { hasData: false, profit: 0 };
-    }
-    
     const equalizeEl = document.getElementById('equalizeToggle');
     const equalize = equalizeEl ? equalizeEl.checked : false;
     
-    // Режим БЕЗ приравнивания: считаем только операции за конкретный день
+    // Без приравнивания: просто деньги по дням
     if (!equalize) {
+        if (daySales.length === 0 && dayPurchases.length === 0) {
+            return { hasData: false, profit: 0 };
+        }
+        
         const income = daySales.reduce((sum, s) => sum + getAmountInRub(s), 0);
         const expense = dayPurchases.reduce((sum, p) => sum + getAmountInRub(p), 0);
+        
         return { hasData: true, profit: income - expense };
     }
     
-    // Режим с приравниванием: если только покупки — день отмечаем, но прибыль считаем как 0
-    if (daySales.length === 0 && dayPurchases.length > 0) {
-        return { hasData: true, profit: 0 };
-    }
+    // С приравниванием: распределяем расходы по датам покупок FIFO по типам
+    const equalizedCostByDate = {};
     
-    let totalIncome = 0;
-    let totalExpense = 0;
-    
-    // Группируем продажи по типу
-    const salesByType = {};
-    daySales.forEach(sale => {
-        if (!salesByType[sale.itemType]) {
-            salesByType[sale.itemType] = { quantity: 0, amount: 0 };
-        }
-        salesByType[sale.itemType].quantity += sale.quantity;
-        salesByType[sale.itemType].amount += getAmountInRub(sale);
+    data.itemTypes.forEach(type => {
+        const typePurchases = data.purchases
+            .filter(p => p.itemType === type)
+            .sort((a, b) => new Date(a.date) - new Date(b.date));
+        const typeSales = data.sales.filter(s => s.itemType === type);
+        const totalSoldQty = typeSales.reduce((sum, s) => sum + s.quantity, 0);
+        let remaining = totalSoldQty;
+        
+        typePurchases.forEach(p => {
+            if (remaining <= 0) return;
+            const useQty = Math.min(p.quantity, remaining);
+            if (useQty <= 0) return;
+            
+            const fullCost = getAmountInRub(p);
+            const costPart = fullCost * (useQty / p.quantity);
+            remaining -= useQty;
+            
+            if (!equalizedCostByDate[p.date]) {
+                equalizedCostByDate[p.date] = 0;
+            }
+            equalizedCostByDate[p.date] += costPart;
+        });
     });
     
-    // Для каждого типа считаем расход с приравниванием (используем все покупки этого типа)
-    Object.keys(salesByType).forEach(type => {
-        const sold = salesByType[type];
-        const typePurchases = data.purchases.filter(p => p.itemType === type);
-        const totalBought = typePurchases.reduce((sum, p) => sum + p.quantity, 0);
-        const totalBoughtAmount = typePurchases.reduce((sum, p) => sum + getAmountInRub(p), 0);
-        
-        totalIncome += sold.amount;
-        
-        // Средняя цена покупки с динамическим курсом
-        if (totalBought > 0) {
-            const avgPurchasePrice = totalBoughtAmount / totalBought;
-            // Приравниваем: берем столько покупок, сколько продаж
-            totalExpense += sold.quantity * avgPurchasePrice;
-        }
-    });
+    const incomeEqualized = daySales.reduce((sum, s) => sum + getAmountInRub(s), 0);
+    const expenseEqualized = equalizedCostByDate[dateStr] || 0;
     
-    return { hasData: true, profit: totalIncome - totalExpense };
+    const hasAny = incomeEqualized !== 0 || expenseEqualized !== 0;
+    return { hasData: hasAny, profit: incomeEqualized - expenseEqualized };
 }
 
 // Показать детали дня
@@ -661,6 +669,8 @@ function showDayDetails(dateStr) {
             <span>${sale.itemType}</span>
             <span>${sale.quantity} шт.</span>
             <span>${formatMoney(getAmountInRub(sale))}</span>
+            <button class="day-edit" data-id="${sale.id}" data-type="income">Изменить</button>
+            <button class="day-delete" data-id="${sale.id}" data-type="income">Удалить</button>
         `;
         container.appendChild(div);
     });
@@ -672,8 +682,59 @@ function showDayDetails(dateStr) {
             <span>${purchase.itemType}</span>
             <span>${purchase.quantity} шт.</span>
             <span>-${formatMoney(getAmountInRub(purchase))}</span>
+            <button class="day-edit" data-id="${purchase.id}" data-type="expense">Изменить</button>
+            <button class="day-delete" data-id="${purchase.id}" data-type="expense">Удалить</button>
         `;
         container.appendChild(div);
+    });
+    
+    // Обработчики редактирования/удаления для дня
+    container.querySelectorAll('.day-edit').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const idStr = btn.dataset.id;
+            const transType = btn.dataset.type;
+            const arr = transType === 'income' ? data.sales : data.purchases;
+            const tx = arr.find(t => String(t.id) === idStr);
+            if (!tx) return;
+            
+            const newAmountStr = prompt('Новая сумма (в исходной валюте):', tx.originalAmount);
+            if (newAmountStr === null) return;
+            const newAmount = parseFloat(String(newAmountStr).replace(',', '.'));
+            if (!isFinite(newAmount) || newAmount <= 0) return;
+            
+            const newQtyStr = prompt('Новое количество:', tx.quantity);
+            if (newQtyStr === null) return;
+            const newQty = parseInt(String(newQtyStr), 10);
+            if (!Number.isFinite(newQty) || newQty <= 0) return;
+            
+            tx.originalAmount = newAmount;
+            tx.quantity = newQty;
+            
+            saveData();
+            updateStats();
+            updateChart();
+            renderCalendar();
+            showDayDetails(dateStr);
+        });
+    });
+    
+    container.querySelectorAll('.day-delete').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const idStr = btn.dataset.id;
+            const transType = btn.dataset.type;
+            
+            if (transType === 'income') {
+                data.sales = data.sales.filter(s => String(s.id) !== idStr);
+            } else {
+                data.purchases = data.purchases.filter(p => String(p.id) !== idStr);
+            }
+            
+            saveData();
+            updateStats();
+            updateChart();
+            renderCalendar();
+            showDayDetails(dateStr);
+        });
     });
     
     const dayProfit = calculateDayProfit(dateStr);
@@ -733,7 +794,7 @@ function renderRatesList() {
         return;
     }
     
-    sorted.forEach((rate, index) => {
+    sorted.forEach(rate => {
         const div = document.createElement('div');
         div.className = 'rate-item';
         div.innerHTML = `
@@ -943,10 +1004,43 @@ function showDetails(type, filterItemType = null) {
                 <div class="detail-qty">${t.quantity} шт.</div>
                 <div class="detail-amount">${t.transType === 'income' ? '+' : '-'}${formatMoney(getAmountInRub(t))}</div>
                 <div class="detail-actions">
+                    <button class="edit-btn" data-id="${t.id}" data-type="${t.transType}">Изменить</button>
                     <button class="delete-btn" data-id="${t.id}" data-type="${t.transType}">Удалить</button>
                 </div>
             `;
             list.appendChild(div);
+        });
+        
+        // Редактирование транзакций
+        list.querySelectorAll('.edit-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const idStr = btn.dataset.id;
+                const transType = btn.dataset.type;
+                const arr = transType === 'income' ? data.sales : data.purchases;
+                const tx = arr.find(tr => String(tr.id) === idStr);
+                if (!tx) return;
+                
+                const newAmountStr = prompt('Новая сумма (в исходной валюте):', tx.originalAmount);
+                if (newAmountStr === null) return;
+                const newAmount = parseFloat(String(newAmountStr).replace(',', '.'));
+                if (!isFinite(newAmount) || newAmount <= 0) return;
+                
+                const newQtyStr = prompt('Новое количество:', tx.quantity);
+                if (newQtyStr === null) return;
+                const newQty = parseInt(String(newQtyStr), 10);
+                if (!Number.isFinite(newQty) || newQty <= 0) return;
+                
+                tx.originalAmount = newAmount;
+                tx.quantity = newQty;
+                
+                saveData();
+                updateStats();
+                updateChart();
+                renderCalendar();
+                
+                // Обновить модалку
+                showDetails(type, filterItemType);
+            });
         });
         
         // Удаление транзакций
