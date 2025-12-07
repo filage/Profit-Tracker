@@ -81,8 +81,37 @@ function initTabs() {
     document.getElementById('resetDatesBtn').addEventListener('click', () => {
         document.getElementById('dateFrom').value = '';
         document.getElementById('dateTo').value = '';
+        document.querySelectorAll('.quick-period-btn').forEach(b => b.classList.remove('active'));
         updateStats();
         updateChart();
+    });
+    
+    // Быстрые периоды
+    document.querySelectorAll('.quick-period-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const period = btn.dataset.period;
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
+            
+            let fromDate = new Date(today);
+            
+            if (period === 'today') {
+                // Сегодня
+            } else if (period === 'week') {
+                fromDate.setDate(today.getDate() - 7);
+            } else if (period === 'month') {
+                fromDate.setMonth(today.getMonth() - 1);
+            }
+            
+            document.getElementById('dateFrom').value = fromDate.toISOString().split('T')[0];
+            document.getElementById('dateTo').value = today.toISOString().split('T')[0];
+            
+            document.querySelectorAll('.quick-period-btn').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            
+            updateStats();
+            updateChart();
+        });
     });
     
     // Экспорт данных
@@ -217,11 +246,14 @@ function initForms() {
         const quantity = parseInt(document.getElementById('purchaseQuantity').value);
         const amount = parseFloat(document.getElementById('purchaseAmount').value);
         
+        // Цена за 1 шт. * количество = общая сумма
+        const totalAmount = amount * quantity;
+        
         data.purchases.push({
             id: Date.now(),
             itemType,
             currency,
-            originalAmount: amount,
+            originalAmount: totalAmount,
             quantity,
             date: purchaseDate
         });
@@ -243,11 +275,14 @@ function initForms() {
         const quantity = parseInt(document.getElementById('saleQuantity').value);
         const amount = parseFloat(document.getElementById('saleAmount').value);
         
+        // Цена за 1 шт. * количество = общая сумма
+        const totalAmount = amount * quantity;
+        
         data.sales.push({
             id: Date.now(),
             itemType,
             currency,
-            originalAmount: amount,
+            originalAmount: totalAmount,
             quantity,
             date: saleDate
         });
@@ -282,6 +317,48 @@ function initForms() {
             renderItemTypesList();
             updateStats();
             document.getElementById('editItemModal').classList.add('hidden');
+        }
+    });
+    
+    // Сохранение редактирования транзакции
+    document.getElementById('saveEditTxBtn').addEventListener('click', () => {
+        const idStr = document.getElementById('editTxId').value;
+        const transType = document.getElementById('editTxType').value;
+        const context = document.getElementById('editTxContext').value;
+        const dateStr = document.getElementById('editTxDate').value;
+        
+        const newPricePerUnit = parseFloat(document.getElementById('editTxAmount').value);
+        const newQty = parseInt(document.getElementById('editTxQuantity').value, 10);
+        
+        if (!isFinite(newPricePerUnit) || newPricePerUnit <= 0) {
+            alert('Введите корректную цену');
+            return;
+        }
+        if (!Number.isFinite(newQty) || newQty <= 0) {
+            alert('Введите корректное количество');
+            return;
+        }
+        
+        const arr = transType === 'income' ? data.sales : data.purchases;
+        const tx = arr.find(t => String(t.id) === idStr);
+        if (!tx) return;
+        
+        // Цена за 1 шт. * количество = общая сумма
+        tx.originalAmount = newPricePerUnit * newQty;
+        tx.quantity = newQty;
+        
+        saveData();
+        updateStats();
+        updateChart();
+        renderCalendar();
+        
+        document.getElementById('editTxModal').classList.add('hidden');
+        
+        // Обновляем нужный контекст
+        if (context === 'day' && dateStr) {
+            showDayDetails(dateStr);
+        } else if (context === 'details' && window._editDetailsParams) {
+            showDetails(window._editDetailsParams.type, window._editDetailsParams.filterItemType);
         }
     });
 }
@@ -677,11 +754,12 @@ function showDayDetails(dateStr) {
     daySales.forEach(sale => {
         const div = document.createElement('div');
         div.className = 'transaction-item sale';
+        const pricePerUnit = sale.originalAmount / sale.quantity;
         div.innerHTML = `
             <span>${sale.itemType}</span>
             <span>${sale.quantity} шт.</span>
             <span>${formatMoney(getAmountInRub(sale))}</span>
-            <button class="day-edit" data-id="${sale.id}" data-type="income">Изменить</button>
+            <button class="day-edit" data-id="${sale.id}" data-type="income" data-price="${pricePerUnit}">Изменить</button>
             <button class="day-delete" data-id="${sale.id}" data-type="income">Удалить</button>
         `;
         container.appendChild(div);
@@ -690,17 +768,18 @@ function showDayDetails(dateStr) {
     dayPurchases.forEach(purchase => {
         const div = document.createElement('div');
         div.className = 'transaction-item expense';
+        const pricePerUnit = purchase.originalAmount / purchase.quantity;
         div.innerHTML = `
             <span>${purchase.itemType}</span>
             <span>${purchase.quantity} шт.</span>
             <span>-${formatMoney(getAmountInRub(purchase))}</span>
-            <button class="day-edit" data-id="${purchase.id}" data-type="expense">Изменить</button>
+            <button class="day-edit" data-id="${purchase.id}" data-type="expense" data-price="${pricePerUnit}">Изменить</button>
             <button class="day-delete" data-id="${purchase.id}" data-type="expense">Удалить</button>
         `;
         container.appendChild(div);
     });
     
-    // Обработчики редактирования/удаления для дня
+    // Обработчики редактирования для дня — открываем модалку
     container.querySelectorAll('.day-edit').forEach(btn => {
         btn.addEventListener('click', () => {
             const idStr = btn.dataset.id;
@@ -709,24 +788,14 @@ function showDayDetails(dateStr) {
             const tx = arr.find(t => String(t.id) === idStr);
             if (!tx) return;
             
-            const newAmountStr = prompt('Новая сумма (в исходной валюте):', tx.originalAmount);
-            if (newAmountStr === null) return;
-            const newAmount = parseFloat(String(newAmountStr).replace(',', '.'));
-            if (!isFinite(newAmount) || newAmount <= 0) return;
-            
-            const newQtyStr = prompt('Новое количество:', tx.quantity);
-            if (newQtyStr === null) return;
-            const newQty = parseInt(String(newQtyStr), 10);
-            if (!Number.isFinite(newQty) || newQty <= 0) return;
-            
-            tx.originalAmount = newAmount;
-            tx.quantity = newQty;
-            
-            saveData();
-            updateStats();
-            updateChart();
-            renderCalendar();
-            showDayDetails(dateStr);
+            const pricePerUnit = tx.originalAmount / tx.quantity;
+            document.getElementById('editTxAmount').value = pricePerUnit.toFixed(2);
+            document.getElementById('editTxQuantity').value = tx.quantity;
+            document.getElementById('editTxId').value = idStr;
+            document.getElementById('editTxType').value = transType;
+            document.getElementById('editTxContext').value = 'day';
+            document.getElementById('editTxDate').value = dateStr;
+            document.getElementById('editTxModal').classList.remove('hidden');
         });
     });
     
@@ -1046,7 +1115,7 @@ function showDetails(type, filterItemType = null) {
             list.appendChild(div);
         });
         
-        // Редактирование транзакций
+        // Редактирование транзакций — открываем модалку
         list.querySelectorAll('.edit-btn').forEach(btn => {
             btn.addEventListener('click', () => {
                 const idStr = btn.dataset.id;
@@ -1055,26 +1124,18 @@ function showDetails(type, filterItemType = null) {
                 const tx = arr.find(tr => String(tr.id) === idStr);
                 if (!tx) return;
                 
-                const newAmountStr = prompt('Новая сумма (в исходной валюте):', tx.originalAmount);
-                if (newAmountStr === null) return;
-                const newAmount = parseFloat(String(newAmountStr).replace(',', '.'));
-                if (!isFinite(newAmount) || newAmount <= 0) return;
+                const pricePerUnit = tx.originalAmount / tx.quantity;
+                document.getElementById('editTxAmount').value = pricePerUnit.toFixed(2);
+                document.getElementById('editTxQuantity').value = tx.quantity;
+                document.getElementById('editTxId').value = idStr;
+                document.getElementById('editTxType').value = transType;
+                document.getElementById('editTxContext').value = 'details';
+                document.getElementById('editTxDate').value = '';
                 
-                const newQtyStr = prompt('Новое количество:', tx.quantity);
-                if (newQtyStr === null) return;
-                const newQty = parseInt(String(newQtyStr), 10);
-                if (!Number.isFinite(newQty) || newQty <= 0) return;
+                // Сохраняем параметры для повторного открытия showDetails
+                window._editDetailsParams = { type, filterItemType };
                 
-                tx.originalAmount = newAmount;
-                tx.quantity = newQty;
-                
-                saveData();
-                updateStats();
-                updateChart();
-                renderCalendar();
-                
-                // Обновить модалку
-                showDetails(type, filterItemType);
+                document.getElementById('editTxModal').classList.remove('hidden');
             });
         });
         

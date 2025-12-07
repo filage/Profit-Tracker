@@ -835,16 +835,15 @@ input:checked + .slider:before {
 
 /* Транзакции дня */
 .transaction-item {
-    display: flex;
-    justify-content: space-between;
+    display: grid;
+    grid-template-columns: 1fr auto auto auto auto;
     align-items: center;
     padding: 12px 14px;
     background: var(--bg-secondary);
     border-radius: 12px;
     margin-bottom: 10px;
     border-left: 4px solid;
-    gap: 10px;
-    flex-wrap: wrap;
+    gap: 12px;
 }
 
 .transaction-item.sale { border-left-color: var(--accent-green); }
@@ -852,6 +851,15 @@ input:checked + .slider:before {
 
 .transaction-item span {
     font-size: 13px;
+}
+
+.transaction-item span:first-child {
+    font-weight: 600;
+}
+
+.transaction-item .tx-actions {
+    display: flex;
+    gap: 6px;
 }
 
 .transaction-item .day-edit,
@@ -864,6 +872,7 @@ input:checked + .slider:before {
     font-size: 11px;
     font-weight: 600;
     transition: all 0.3s ease;
+    white-space: nowrap;
 }
 
 .transaction-item .day-edit {
@@ -1011,6 +1020,34 @@ input:checked + .slider:before {
 .date-filter label {
     color: var(--text-secondary);
     font-size: 13px;
+}
+
+.quick-period-btns {
+    display: flex;
+    gap: 6px;
+}
+
+.quick-period-btn {
+    padding: 6px 12px;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    color: var(--text-secondary);
+    font-size: 11px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.3s ease;
+}
+
+.quick-period-btn:hover {
+    background: var(--bg-hover);
+    color: var(--text-primary);
+}
+
+.quick-period-btn.active {
+    background: var(--gradient-blue);
+    border-color: transparent;
+    color: #fff;
 }
 
 .date-filter input[type="date"] {

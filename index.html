@@ -70,6 +70,11 @@
                 <div class="control-row">
                     <div class="date-filter">
                         <label>Период:</label>
+                        <div class="quick-period-btns">
+                            <button class="quick-period-btn" data-period="today">Сегодня</button>
+                            <button class="quick-period-btn" data-period="week">Неделя</button>
+                            <button class="quick-period-btn" data-period="month">Месяц</button>
+                        </div>
                         <input type="date" id="dateFrom" placeholder="С">
                         <span>—</span>
                         <input type="date" id="dateTo" placeholder="По">
@@ -191,8 +196,8 @@
                     <input type="number" id="purchaseQuantity" min="1" required>
                 </div>
                 <div class="form-group">
-                    <label>Сумма:</label>
-                    <input type="number" id="purchaseAmount" step="0.01" required>
+                    <label>Цена за 1 шт.:</label>
+                    <input type="number" step="0.01" id="purchaseAmount" required>
                 </div>
                 <button type="submit" class="btn-primary">Добавить</button>
             </form>
@@ -225,8 +230,8 @@
                     <input type="number" id="saleQuantity" min="1" required>
                 </div>
                 <div class="form-group">
-                    <label>Сумма:</label>
-                    <input type="number" id="saleAmount" step="0.01" required>
+                    <label>Цена за 1 шт.:</label>
+                    <input type="number" step="0.01" id="saleAmount" required>
                 </div>
                 <button type="submit" class="btn-primary">Добавить</button>
             </form>
@@ -270,6 +275,27 @@
             <h2 id="detailsTitle">Детализация</h2>
             <div class="details-summary" id="detailsSummary"></div>
             <div class="details-list" id="detailsList"></div>
+        </div>
+    </div>
+
+    <!-- Модальное окно редактирования транзакции -->
+    <div id="editTxModal" class="modal hidden">
+        <div class="modal-content">
+            <span class="close-modal">&times;</span>
+            <h2>Редактировать операцию</h2>
+            <div class="form-group">
+                <label>Цена за 1 шт. (в исходной валюте):</label>
+                <input type="number" step="0.01" id="editTxAmount" required>
+            </div>
+            <div class="form-group">
+                <label>Количество:</label>
+                <input type="number" id="editTxQuantity" min="1" required>
+            </div>
+            <input type="hidden" id="editTxId">
+            <input type="hidden" id="editTxType">
+            <input type="hidden" id="editTxContext">
+            <input type="hidden" id="editTxDate">
+            <button id="saveEditTxBtn" class="btn-primary">Сохранить</button>
         </div>
     </div>
 
