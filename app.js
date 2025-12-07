@@ -585,7 +585,17 @@ function calculateDayProfit(dateStr) {
         return { hasData: false, profit: 0 };
     }
     
-    // Только покупки (инвестиция ещё не реализована) — отмечаем день, но прибыль считаем как 0
+    const equalizeEl = document.getElementById('equalizeToggle');
+    const equalize = equalizeEl ? equalizeEl.checked : false;
+    
+    // Режим БЕЗ приравнивания: считаем только операции за конкретный день
+    if (!equalize) {
+        const income = daySales.reduce((sum, s) => sum + getAmountInRub(s), 0);
+        const expense = dayPurchases.reduce((sum, p) => sum + getAmountInRub(p), 0);
+        return { hasData: true, profit: income - expense };
+    }
+    
+    // Режим с приравниванием: если только покупки — день отмечаем, но прибыль считаем как 0
     if (daySales.length === 0 && dayPurchases.length > 0) {
         return { hasData: true, profit: 0 };
     }
@@ -603,7 +613,7 @@ function calculateDayProfit(dateStr) {
         salesByType[sale.itemType].amount += getAmountInRub(sale);
     });
     
-    // Для каждого типа считаем расход с приравниванием
+    // Для каждого типа считаем расход с приравниванием (используем все покупки этого типа)
     Object.keys(salesByType).forEach(type => {
         const sold = salesByType[type];
         const typePurchases = data.purchases.filter(p => p.itemType === type);
@@ -942,13 +952,13 @@ function showDetails(type, filterItemType = null) {
         // Удаление транзакций
         list.querySelectorAll('.delete-btn').forEach(btn => {
             btn.addEventListener('click', () => {
-                const id = parseInt(btn.dataset.id);
+                const idStr = btn.dataset.id;
                 const transType = btn.dataset.type;
                 
                 if (transType === 'income') {
-                    data.sales = data.sales.filter(s => s.id !== id);
+                    data.sales = data.sales.filter(s => String(s.id) !== idStr);
                 } else {
-                    data.purchases = data.purchases.filter(p => p.id !== id);
+                    data.purchases = data.purchases.filter(p => String(p.id) !== idStr);
                 }
                 
                 saveData();
