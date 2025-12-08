@@ -1160,24 +1160,500 @@ input:checked + .slider:before {
     padding: 14px 12px;
 }
 
-/* Адаптивность */
-@media (max-width: 700px) {
-    .stats-cards { grid-template-columns: 1fr; }
+/* ========== АДАПТИВНОСТЬ ДЛЯ МОБИЛЬНЫХ ========== */
+
+/* Планшеты */
+@media (max-width: 768px) {
+    .container {
+        padding: 15px;
+        padding-bottom: 100px;
+    }
     
-    .control-row { flex-direction: column; align-items: stretch; }
+    .header h1 {
+        font-size: 24px;
+    }
     
-    .chart-controls { flex-direction: column; }
+    .stats-cards {
+        grid-template-columns: 1fr;
+        gap: 12px;
+    }
+    
+    .stat-card {
+        padding: 18px;
+    }
+    
+    .stat-icon {
+        font-size: 32px;
+    }
+    
+    .stat-info .amount {
+        font-size: 22px;
+    }
+    
+    .profit-amount {
+        font-size: 32px;
+    }
+    
+    .chart-controls {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 12px;
+    }
+    
+    .chart-left, .chart-right {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 10px;
+    }
+    
+    .period-scale {
+        flex-wrap: wrap;
+        justify-content: center;
+    }
+    
+    .period-scale .period-btn {
+        flex: 1;
+        min-width: 60px;
+    }
+    
+    .date-range {
+        flex-wrap: wrap;
+        justify-content: center;
+    }
+    
+    .date-range input[type="date"] {
+        flex: 1;
+        min-width: 120px;
+    }
+    
+    .control-row {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 15px;
+    }
+    
+    .item-selector {
+        flex-wrap: wrap;
+        justify-content: center;
+    }
+    
+    .item-selector select {
+        flex: 1;
+        min-width: 120px;
+    }
+    
+    .equalize-toggle {
+        justify-content: center;
+    }
     
     .action-buttons {
         flex-direction: column;
-        width: calc(100% - 40px);
+        width: calc(100% - 30px);
+        left: 15px;
+        right: 15px;
+        bottom: 15px;
+        gap: 8px;
     }
     
-    .btn-action { width: 100%; justify-content: center; }
+    .btn-action {
+        width: 100%;
+        justify-content: center;
+        padding: 14px 20px;
+    }
     
-    .item-stat-values { 
+    .item-stat-row {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 8px;
+    }
+    
+    .item-stat-values {
         flex-direction: column;
         gap: 4px;
-        text-align: right;
+        align-items: flex-start;
+        width: 100%;
+    }
+    
+    .calendar-grid {
+        gap: 4px;
+    }
+    
+    .calendar-day {
+        padding: 8px 4px;
+        min-height: 55px;
+    }
+    
+    .calendar-day .day-number {
+        font-size: 12px;
+    }
+    
+    .calendar-day .day-profit {
+        font-size: 8px;
+    }
+    
+    .modal-content {
+        width: 95%;
+        max-width: none;
+        margin: 10px;
+        padding: 20px;
+        max-height: 90vh;
+        overflow-y: auto;
+    }
+    
+    .details-modal .details-content {
+        width: 95%;
+        margin: 10px;
+        max-height: 90vh;
+    }
+    
+    .details-summary {
+        flex-direction: column;
+        gap: 10px;
+    }
+    
+    .summary-item {
+        padding: 12px;
+    }
+    
+    .transaction-item {
+        grid-template-columns: 1fr auto;
+        gap: 8px;
+    }
+    
+    .transaction-item .day-edit,
+    .transaction-item .day-delete {
+        padding: 6px 10px;
+        font-size: 11px;
+    }
+}
+
+/* Телефоны */
+@media (max-width: 480px) {
+    .container {
+        padding: 10px;
+        padding-bottom: 90px;
+    }
+    
+    .header {
+        margin-bottom: 20px;
+    }
+    
+    .header h1 {
+        font-size: 20px;
+    }
+    
+    .nav-tabs {
+        padding: 6px;
+        gap: 4px;
+        border-radius: 12px;
+    }
+    
+    .nav-tab {
+        padding: 10px 8px;
+        font-size: 12px;
+        border-radius: 8px;
+        flex-direction: column;
+        gap: 4px;
+    }
+    
+    .tab-icon {
+        font-size: 18px;
+    }
+    
+    .chart-section {
+        padding: 15px;
+        border-radius: 16px;
+    }
+    
+    .chart-container {
+        height: 200px;
+    }
+    
+    .chart-btn, .period-btn {
+        padding: 8px 10px;
+        font-size: 11px;
+    }
+    
+    .period-label {
+        font-size: 11px;
+    }
+    
+    .btn-small {
+        padding: 6px 10px;
+        font-size: 11px;
+    }
+    
+    .controls {
+        padding: 15px;
+        border-radius: 12px;
+    }
+    
+    .item-selector label {
+        font-size: 12px;
+    }
+    
+    .item-selector select {
+        padding: 8px 12px;
+        font-size: 13px;
+    }
+    
+    .equalize-toggle span {
+        font-size: 12px;
+    }
+    
+    .switch {
+        width: 44px;
+        height: 24px;
+    }
+    
+    .slider:before {
+        height: 18px;
+        width: 18px;
+        left: 2px;
+        bottom: 2px;
+    }
+    
+    input:checked + .slider:before {
+        transform: translateX(20px);
+    }
+    
+    .stat-card {
+        padding: 15px;
+        gap: 12px;
+    }
+    
+    .stat-icon {
+        font-size: 28px;
+    }
+    
+    .stat-info h3 {
+        font-size: 10px;
+        letter-spacing: 1px;
+    }
+    
+    .stat-info .amount {
+        font-size: 20px;
+    }
+    
+    .stat-info .quantity {
+        font-size: 11px;
+    }
+    
+    .profit-display {
+        padding: 20px;
+        border-radius: 16px;
+    }
+    
+    .profit-label {
+        font-size: 10px;
+    }
+    
+    .profit-amount {
+        font-size: 28px;
+    }
+    
+    .item-stats {
+        padding: 15px;
+    }
+    
+    .item-stats h3 {
+        font-size: 13px;
+    }
+    
+    .item-stat-row {
+        padding: 12px 0;
+    }
+    
+    .item-stat-name {
+        font-size: 13px;
+    }
+    
+    .item-stat-values span {
+        font-size: 11px;
+    }
+    
+    .calendar-section {
+        padding: 15px;
+    }
+    
+    .calendar-header h3 {
+        font-size: 14px;
+    }
+    
+    .calendar-nav button {
+        width: 32px;
+        height: 32px;
+        font-size: 14px;
+    }
+    
+    .calendar-grid .calendar-header-cell {
+        font-size: 10px;
+        padding: 6px 0;
+    }
+    
+    .calendar-day {
+        padding: 6px 2px;
+        min-height: 50px;
+        border-radius: 6px;
+    }
+    
+    .calendar-day .day-number {
+        font-size: 11px;
+    }
+    
+    .calendar-day .day-profit {
+        font-size: 7px;
+    }
+    
+    .day-details {
+        padding: 15px;
+    }
+    
+    .day-details-header h4 {
+        font-size: 14px;
+    }
+    
+    .transaction-item {
+        font-size: 12px;
+        padding: 10px;
+        grid-template-columns: 1fr;
+        gap: 6px;
+    }
+    
+    .transaction-item > span:first-child {
+        font-weight: 600;
+    }
+    
+    .transaction-item .day-edit,
+    .transaction-item .day-delete {
+        padding: 8px 12px;
+        font-size: 12px;
+    }
+    
+    .action-buttons {
+        bottom: 10px;
+        left: 10px;
+        right: 10px;
+        gap: 6px;
+    }
+    
+    .btn-action {
+        padding: 12px 16px;
+        font-size: 13px;
+        border-radius: 10px;
+    }
+    
+    .modal-content {
+        padding: 18px;
+        border-radius: 16px;
+    }
+    
+    .modal-content h2 {
+        font-size: 18px;
+        margin-bottom: 15px;
+    }
+    
+    .form-group {
+        margin-bottom: 12px;
+    }
+    
+    .form-group label {
+        font-size: 12px;
+    }
+    
+    .form-group input,
+    .form-group select {
+        padding: 10px 12px;
+        font-size: 14px;
+    }
+    
+    .btn-primary {
+        padding: 12px;
+        font-size: 14px;
+    }
+    
+    .details-content {
+        padding: 15px;
+    }
+    
+    .details-content h2 {
+        font-size: 18px;
+    }
+    
+    .summary-item h4 {
+        font-size: 10px;
+    }
+    
+    .summary-item p {
+        font-size: 16px;
+    }
+    
+    .details-list {
+        max-height: 50vh;
+    }
+    
+    .detail-item {
+        padding: 12px;
+        font-size: 12px;
+    }
+    
+    .detail-actions button {
+        padding: 6px 10px;
+        font-size: 11px;
+    }
+    
+    /* Курсы валют */
+    .rates-section {
+        padding: 15px;
+    }
+    
+    .rate-input-group {
+        flex-direction: column;
+        gap: 10px;
+    }
+    
+    .rate-input-group input {
+        width: 100%;
+    }
+    
+    .rates-list {
+        max-height: 250px;
+    }
+    
+    .rate-item {
+        padding: 10px;
+        font-size: 12px;
+    }
+}
+
+/* Очень маленькие экраны */
+@media (max-width: 360px) {
+    .header h1 {
+        font-size: 18px;
+    }
+    
+    .nav-tab {
+        padding: 8px 6px;
+        font-size: 11px;
+    }
+    
+    .tab-icon {
+        font-size: 16px;
+    }
+    
+    .stat-info .amount {
+        font-size: 18px;
+    }
+    
+    .profit-amount {
+        font-size: 24px;
+    }
+    
+    .calendar-day {
+        min-height: 45px;
+    }
+    
+    .calendar-day .day-number {
+        font-size: 10px;
     }
 }
