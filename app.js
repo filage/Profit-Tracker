@@ -507,24 +507,32 @@ function updateStats() {
     let totalSold = sales.reduce((sum, s) => sum + s.quantity, 0);
     
     // Суммы с динамическим пересчётом по курсу
-    let totalPurchaseAmount = purchases.reduce((sum, p) => sum + getAmountInRub(p), 0);
     let totalSaleAmount = sales.reduce((sum, s) => sum + getAmountInRub(s), 0);
     
-    // Средняя цена покупки и продажи
-    let avgPurchasePrice = totalBought > 0 ? totalPurchaseAmount / totalBought : 0;
-    let avgSalePrice = totalSold > 0 ? totalSaleAmount / totalSold : 0;
-    
-    // Приравнивание: уменьшаем количество покупок до количества продаж
+    // Приравнивание: убираем самые новые покупки
     let displayBought = totalBought;
     let displaySold = totalSold;
+    let totalExpense = 0;
     
     if (equalize && totalBought > totalSold && totalSold > 0) {
+        // Сортируем покупки по дате (старые первые)
+        const sortedPurchases = [...purchases].sort((a, b) => a.date.localeCompare(b.date));
+        
+        let remainingQty = totalSold;
+        for (const p of sortedPurchases) {
+            if (remainingQty <= 0) break;
+            
+            const pricePerUnit = getAmountInRub(p) / p.quantity;
+            const takeQty = Math.min(p.quantity, remainingQty);
+            totalExpense += takeQty * pricePerUnit;
+            remainingQty -= takeQty;
+        }
         displayBought = totalSold;
+    } else {
+        totalExpense = purchases.reduce((sum, p) => sum + getAmountInRub(p), 0);
     }
     
-    // Расчет сумм с учётом приравнивания
-    let totalExpense = displayBought * avgPurchasePrice;
-    let totalIncome = displaySold * avgSalePrice;
+    let totalIncome = totalSaleAmount;
     let profit = totalIncome - totalExpense;
     
     // Обновление UI
@@ -565,11 +573,21 @@ function renderItemStats(equalize) {
         
         if (bought === 0 && sold === 0) return;
         
-        // Приравнивание
+        // Приравнивание: убираем самые новые покупки
         if (equalize && bought > sold && sold > 0) {
-            const avgPrice = boughtAmount / bought;
+            const sortedPurchases = [...purchases].sort((a, b) => a.date.localeCompare(b.date));
+            
+            let remainingQty = sold;
+            boughtAmount = 0;
+            for (const p of sortedPurchases) {
+                if (remainingQty <= 0) break;
+                
+                const pricePerUnit = getAmountInRub(p) / p.quantity;
+                const takeQty = Math.min(p.quantity, remainingQty);
+                boughtAmount += takeQty * pricePerUnit;
+                remainingQty -= takeQty;
+            }
             bought = sold;
-            boughtAmount = bought * avgPrice;
         }
         
         const profit = soldAmount - boughtAmount;
