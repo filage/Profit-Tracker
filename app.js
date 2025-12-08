@@ -38,6 +38,15 @@ document.addEventListener('DOMContentLoaded', () => {
     initChart();
     initDetailsClicks();
     updateItemTypeSelects();
+    
+    // Установка периода "Месяц" по умолчанию
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const fromDate = new Date(today);
+    fromDate.setMonth(today.getMonth() - 1);
+    document.getElementById('dateFrom').value = fromDate.toISOString().split('T')[0];
+    document.getElementById('dateTo').value = today.toISOString().split('T')[0];
+    
     updateStats();
     renderItemTypesList();
 });
@@ -95,12 +104,12 @@ function initTabs() {
             
             let fromDate = new Date(today);
             
-            if (period === 'today') {
-                // Сегодня
-            } else if (period === 'week') {
+            if (period === 'week') {
                 fromDate.setDate(today.getDate() - 7);
             } else if (period === 'month') {
                 fromDate.setMonth(today.getMonth() - 1);
+            } else if (period === 'year') {
+                fromDate.setFullYear(today.getFullYear() - 1);
             }
             
             document.getElementById('dateFrom').value = fromDate.toISOString().split('T')[0];
@@ -325,11 +334,22 @@ function initForms() {
         const idStr = document.getElementById('editTxId').value;
         const transType = document.getElementById('editTxType').value;
         const context = document.getElementById('editTxContext').value;
-        const dateStr = document.getElementById('editTxDate').value;
+        const contextDateStr = document.getElementById('editTxDate').value;
         
+        const newItemType = document.getElementById('editTxItemType').value;
+        const newDate = document.getElementById('editTxDateInput').value;
+        const newCurrency = document.getElementById('editTxCurrency').value;
         const newPricePerUnit = parseFloat(document.getElementById('editTxAmount').value);
         const newQty = parseInt(document.getElementById('editTxQuantity').value, 10);
         
+        if (!newItemType) {
+            alert('Выберите тип вещи');
+            return;
+        }
+        if (!newDate) {
+            alert('Укажите дату');
+            return;
+        }
         if (!isFinite(newPricePerUnit) || newPricePerUnit <= 0) {
             alert('Введите корректную цену');
             return;
@@ -343,7 +363,10 @@ function initForms() {
         const tx = arr.find(t => String(t.id) === idStr);
         if (!tx) return;
         
-        // Цена за 1 шт. * количество = общая сумма
+        // Обновляем все поля
+        tx.itemType = newItemType;
+        tx.date = newDate;
+        tx.currency = newCurrency;
         tx.originalAmount = newPricePerUnit * newQty;
         tx.quantity = newQty;
         
@@ -355,8 +378,8 @@ function initForms() {
         document.getElementById('editTxModal').classList.add('hidden');
         
         // Обновляем нужный контекст
-        if (context === 'day' && dateStr) {
-            showDayDetails(dateStr);
+        if (context === 'day' && contextDateStr) {
+            showDayDetails(contextDateStr);
         } else if (context === 'details' && window._editDetailsParams) {
             showDetails(window._editDetailsParams.type, window._editDetailsParams.filterItemType);
         }
@@ -652,6 +675,9 @@ function renderCalendar() {
         dayEl.className = 'calendar-day';
         if (dayData.hasData) {
             dayEl.classList.add('has-data');
+            if (dayData.profit < 0) {
+                dayEl.classList.add('negative');
+            }
         }
         
         let profitHtml = '';
@@ -788,9 +814,22 @@ function showDayDetails(dateStr) {
             const tx = arr.find(t => String(t.id) === idStr);
             if (!tx) return;
             
+            // Заполняем select типов вещей
+            const itemTypeSelect = document.getElementById('editTxItemType');
+            itemTypeSelect.innerHTML = '';
+            data.itemTypes.forEach(type => {
+                const opt = document.createElement('option');
+                opt.value = type;
+                opt.textContent = type;
+                itemTypeSelect.appendChild(opt);
+            });
+            itemTypeSelect.value = tx.itemType;
+            
             const pricePerUnit = tx.originalAmount / tx.quantity;
             document.getElementById('editTxAmount').value = pricePerUnit.toFixed(2);
             document.getElementById('editTxQuantity').value = tx.quantity;
+            document.getElementById('editTxDateInput').value = tx.date;
+            document.getElementById('editTxCurrency').value = tx.currency || 'RUB';
             document.getElementById('editTxId').value = idStr;
             document.getElementById('editTxType').value = transType;
             document.getElementById('editTxContext').value = 'day';
@@ -941,15 +980,6 @@ function initChart() {
         }
     });
     
-    // Кнопки периода
-    document.querySelectorAll('.period-btn').forEach(btn => {
-        btn.addEventListener('click', () => {
-            document.querySelectorAll('.period-btn').forEach(b => b.classList.remove('active'));
-            btn.classList.add('active');
-            chartPeriod = parseInt(btn.dataset.period);
-            updateChart();
-        });
-    });
     
     // Кнопка точек - toggle
     document.getElementById('togglePointsBtn').addEventListener('click', () => {
@@ -1124,9 +1154,22 @@ function showDetails(type, filterItemType = null) {
                 const tx = arr.find(tr => String(tr.id) === idStr);
                 if (!tx) return;
                 
+                // Заполняем select типов вещей
+                const itemTypeSelect = document.getElementById('editTxItemType');
+                itemTypeSelect.innerHTML = '';
+                data.itemTypes.forEach(itemType => {
+                    const opt = document.createElement('option');
+                    opt.value = itemType;
+                    opt.textContent = itemType;
+                    itemTypeSelect.appendChild(opt);
+                });
+                itemTypeSelect.value = tx.itemType;
+                
                 const pricePerUnit = tx.originalAmount / tx.quantity;
                 document.getElementById('editTxAmount').value = pricePerUnit.toFixed(2);
                 document.getElementById('editTxQuantity').value = tx.quantity;
+                document.getElementById('editTxDateInput').value = tx.date;
+                document.getElementById('editTxCurrency').value = tx.currency || 'RUB';
                 document.getElementById('editTxId').value = idStr;
                 document.getElementById('editTxType').value = transType;
                 document.getElementById('editTxContext').value = 'details';

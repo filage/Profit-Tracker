@@ -35,11 +35,17 @@
                     <div class="chart-buttons">
                         <button class="chart-btn" id="togglePointsBtn">⚫ ТОЧКИ</button>
                     </div>
-                    <div class="period-buttons">
-                        <button class="period-btn" data-period="1">1 день</button>
-                        <button class="period-btn" data-period="7">7 дней</button>
-                        <button class="period-btn active" data-period="30">30 дней</button>
-                        <button class="period-btn" data-period="365">Год</button>
+                    <div class="period-filter">
+                        <label>Период:</label>
+                        <div class="quick-period-btns">
+                            <button class="quick-period-btn" data-period="week">Неделя</button>
+                            <button class="quick-period-btn active" data-period="month">Месяц</button>
+                            <button class="quick-period-btn" data-period="year">Год</button>
+                        </div>
+                        <input type="date" id="dateFrom">
+                        <span>—</span>
+                        <input type="date" id="dateTo">
+                        <button id="resetDatesBtn" class="btn-small">Сброс</button>
                     </div>
                 </div>
                 <div class="chart-container">
@@ -68,18 +74,6 @@
 
             <div class="controls filter-row">
                 <div class="control-row">
-                    <div class="date-filter">
-                        <label>Период:</label>
-                        <div class="quick-period-btns">
-                            <button class="quick-period-btn" data-period="today">Сегодня</button>
-                            <button class="quick-period-btn" data-period="week">Неделя</button>
-                            <button class="quick-period-btn" data-period="month">Месяц</button>
-                        </div>
-                        <input type="date" id="dateFrom" placeholder="С">
-                        <span>—</span>
-                        <input type="date" id="dateTo" placeholder="По">
-                        <button id="resetDatesBtn" class="btn-small">Сброс</button>
-                    </div>
                     <div class="data-buttons">
                         <button id="exportBtn" class="btn-small btn-export">📤 Экспорт</button>
                         <button id="importBtn" class="btn-small btn-import">📥 Импорт</button>
@@ -284,7 +278,22 @@
             <span class="close-modal">&times;</span>
             <h2>Редактировать операцию</h2>
             <div class="form-group">
-                <label>Цена за 1 шт. (в исходной валюте):</label>
+                <label>Тип вещи:</label>
+                <select id="editTxItemType"></select>
+            </div>
+            <div class="form-group">
+                <label>Дата:</label>
+                <input type="date" id="editTxDateInput">
+            </div>
+            <div class="form-group">
+                <label>Валюта:</label>
+                <select id="editTxCurrency">
+                    <option value="RUB">Рубли (₽)</option>
+                    <option value="CNY">Юани (¥)</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label>Цена за 1 шт.:</label>
                 <input type="number" step="0.01" id="editTxAmount" required>
             </div>
             <div class="form-group">

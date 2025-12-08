@@ -131,12 +131,12 @@ body {
     margin-bottom: 20px;
 }
 
-.chart-buttons, .period-buttons {
+.chart-buttons {
     display: flex;
     gap: 8px;
 }
 
-.chart-btn, .period-btn {
+.chart-btn {
     background: var(--bg-secondary);
     border: 1px solid var(--border-color);
     color: var(--text-secondary);
@@ -148,15 +148,41 @@ body {
     transition: all 0.3s ease;
 }
 
-.chart-btn:hover, .period-btn:hover {
+.chart-btn:hover {
     background: var(--bg-hover);
     color: var(--text-primary);
 }
 
-.chart-btn.active, .period-btn.active {
+.chart-btn.active {
     background: var(--gradient-blue);
     border-color: transparent;
     color: #fff;
+}
+
+.period-filter {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+.period-filter label {
+    color: var(--text-secondary);
+    font-size: 13px;
+    font-weight: 500;
+}
+
+.period-filter input[type="date"] {
+    padding: 6px 10px;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    color: var(--text-primary);
+    font-size: 12px;
+}
+
+.period-filter span {
+    color: var(--text-secondary);
 }
 
 .chart-container {
@@ -495,6 +521,11 @@ input:checked + .slider:before {
 .calendar-day.has-data {
     border-color: var(--accent-green);
     box-shadow: var(--shadow-glow-green);
+}
+
+.calendar-day.has-data.negative {
+    border-color: var(--accent-red);
+    box-shadow: var(--shadow-glow-red);
 }
 
 .calendar-day .day-number {
