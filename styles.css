@@ -125,54 +125,63 @@ body {
 .chart-controls {
     display: flex;
     justify-content: space-between;
-    align-items: center;
-    flex-wrap: wrap;
+    align-items: flex-start;
     gap: 15px;
     margin-bottom: 20px;
 }
 
-.chart-buttons {
+.chart-left {
     display: flex;
     gap: 8px;
 }
 
-.chart-btn {
+.chart-right {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 8px;
+}
+
+.period-scale,
+.date-range {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.period-label {
+    color: var(--text-secondary);
+    font-size: 12px;
+    font-weight: 500;
+}
+
+.chart-btn,
+.period-btn {
     background: var(--bg-secondary);
     border: 1px solid var(--border-color);
     color: var(--text-secondary);
-    padding: 10px 16px;
+    padding: 8px 14px;
     font-size: 12px;
     font-weight: 600;
     cursor: pointer;
-    border-radius: 10px;
+    border-radius: 8px;
     transition: all 0.3s ease;
 }
 
-.chart-btn:hover {
+.chart-btn:hover,
+.period-btn:hover {
     background: var(--bg-hover);
     color: var(--text-primary);
 }
 
-.chart-btn.active {
+.chart-btn.active,
+.period-btn.active {
     background: var(--gradient-blue);
     border-color: transparent;
     color: #fff;
 }
 
-.period-filter {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    flex-wrap: wrap;
-}
-
-.period-filter label {
-    color: var(--text-secondary);
-    font-size: 13px;
-    font-weight: 500;
-}
-
-.period-filter input[type="date"] {
+.date-range input[type="date"] {
     padding: 6px 10px;
     background: var(--bg-secondary);
     border: 1px solid var(--border-color);
@@ -181,7 +190,7 @@ body {
     font-size: 12px;
 }
 
-.period-filter span {
+.date-range span {
     color: var(--text-secondary);
 }
 

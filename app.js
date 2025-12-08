@@ -39,14 +39,6 @@ document.addEventListener('DOMContentLoaded', () => {
     initDetailsClicks();
     updateItemTypeSelects();
     
-    // Установка периода "Месяц" по умолчанию
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const fromDate = new Date(today);
-    fromDate.setMonth(today.getMonth() - 1);
-    document.getElementById('dateFrom').value = fromDate.toISOString().split('T')[0];
-    document.getElementById('dateTo').value = today.toISOString().split('T')[0];
-    
     updateStats();
     renderItemTypesList();
 });
@@ -90,35 +82,16 @@ function initTabs() {
     document.getElementById('resetDatesBtn').addEventListener('click', () => {
         document.getElementById('dateFrom').value = '';
         document.getElementById('dateTo').value = '';
-        document.querySelectorAll('.quick-period-btn').forEach(b => b.classList.remove('active'));
         updateStats();
         updateChart();
     });
     
-    // Быстрые периоды
-    document.querySelectorAll('.quick-period-btn').forEach(btn => {
+    // Кнопки масштаба графика
+    document.querySelectorAll('.period-btn').forEach(btn => {
         btn.addEventListener('click', () => {
-            const period = btn.dataset.period;
-            const today = new Date();
-            today.setHours(0, 0, 0, 0);
-            
-            let fromDate = new Date(today);
-            
-            if (period === 'week') {
-                fromDate.setDate(today.getDate() - 7);
-            } else if (period === 'month') {
-                fromDate.setMonth(today.getMonth() - 1);
-            } else if (period === 'year') {
-                fromDate.setFullYear(today.getFullYear() - 1);
-            }
-            
-            document.getElementById('dateFrom').value = fromDate.toISOString().split('T')[0];
-            document.getElementById('dateTo').value = today.toISOString().split('T')[0];
-            
-            document.querySelectorAll('.quick-period-btn').forEach(b => b.classList.remove('active'));
+            document.querySelectorAll('.period-btn').forEach(b => b.classList.remove('active'));
             btn.classList.add('active');
-            
-            updateStats();
+            chartPeriod = parseInt(btn.dataset.period);
             updateChart();
         });
     });

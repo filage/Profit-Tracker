@@ -32,20 +32,23 @@
             <!-- График прибыли -->
             <div class="chart-section">
                 <div class="chart-controls">
-                    <div class="chart-buttons">
+                    <div class="chart-left">
                         <button class="chart-btn" id="togglePointsBtn">⚫ ТОЧКИ</button>
                     </div>
-                    <div class="period-filter">
-                        <label>Период:</label>
-                        <div class="quick-period-btns">
-                            <button class="quick-period-btn" data-period="week">Неделя</button>
-                            <button class="quick-period-btn active" data-period="month">Месяц</button>
-                            <button class="quick-period-btn" data-period="year">Год</button>
+                    <div class="chart-right">
+                        <div class="period-scale">
+                            <span class="period-label">Масштаб:</span>
+                            <button class="period-btn" data-period="7">Неделя</button>
+                            <button class="period-btn active" data-period="30">Месяц</button>
+                            <button class="period-btn" data-period="365">Год</button>
                         </div>
-                        <input type="date" id="dateFrom">
-                        <span>—</span>
-                        <input type="date" id="dateTo">
-                        <button id="resetDatesBtn" class="btn-small">Сброс</button>
+                        <div class="date-range">
+                            <span class="period-label">Фильтр:</span>
+                            <input type="date" id="dateFrom">
+                            <span>—</span>
+                            <input type="date" id="dateTo">
+                            <button id="resetDatesBtn" class="btn-small">Сброс</button>
+                        </div>
                     </div>
                 </div>
                 <div class="chart-container">
