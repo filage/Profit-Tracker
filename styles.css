@@ -277,6 +277,12 @@ body {
     gap: 12px;
 }
 
+.control-buttons {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+}
+
 .equalize-toggle span {
     color: var(--text-secondary);
     font-size: 14px;
@@ -1248,7 +1254,7 @@ input:checked + .slider:before {
     
     .action-buttons {
         flex-direction: column;
-        width: calc(100% - 30px);
+        width: auto;
         left: 15px;
         right: 15px;
         bottom: 15px;
@@ -1259,6 +1265,33 @@ input:checked + .slider:before {
         width: 100%;
         justify-content: center;
         padding: 14px 20px;
+        text-align: center;
+    }
+    
+    .item-selector {
+        flex-direction: row;
+        align-items: center;
+        gap: 10px;
+        flex-wrap: wrap;
+    }
+    
+    .item-selector select {
+        flex: 1;
+        min-width: 100px;
+    }
+    
+    .control-buttons {
+        justify-content: center;
+        width: 100%;
+    }
+    
+    .calendar-section {
+        overflow-x: hidden;
+    }
+    
+    .calendar-grid {
+        min-width: 100%;
+        width: 100%;
     }
     
     .item-stat-row {
@@ -1388,13 +1421,34 @@ input:checked + .slider:before {
         border-radius: 12px;
     }
     
+    .control-row {
+        flex-direction: column;
+        gap: 12px;
+    }
+    
+    .item-selector {
+        width: 100%;
+    }
+    
     .item-selector label {
         font-size: 12px;
+        white-space: nowrap;
     }
     
     .item-selector select {
-        padding: 8px 12px;
-        font-size: 13px;
+        padding: 10px 12px;
+        font-size: 14px;
+        flex: 1;
+    }
+    
+    .control-buttons {
+        justify-content: center;
+        gap: 12px;
+    }
+    
+    .control-buttons .btn-icon {
+        padding: 10px 14px;
+        font-size: 16px;
     }
     
     .equalize-toggle span {
@@ -1474,6 +1528,7 @@ input:checked + .slider:before {
     
     .calendar-section {
         padding: 15px;
+        overflow-x: hidden;
     }
     
     .calendar-header h3 {
@@ -1486,23 +1541,30 @@ input:checked + .slider:before {
         font-size: 14px;
     }
     
+    .calendar-grid {
+        display: grid;
+        grid-template-columns: repeat(7, 1fr);
+        gap: 3px;
+        width: 100%;
+    }
+    
     .calendar-grid .calendar-header-cell {
-        font-size: 10px;
-        padding: 6px 0;
+        font-size: 9px;
+        padding: 5px 0;
     }
     
     .calendar-day {
-        padding: 6px 2px;
-        min-height: 50px;
+        padding: 4px 2px;
+        min-height: 45px;
         border-radius: 6px;
     }
     
     .calendar-day .day-number {
-        font-size: 11px;
+        font-size: 10px;
     }
     
     .calendar-day .day-profit {
-        font-size: 7px;
+        font-size: 6px;
     }
     
     .day-details {
@@ -1535,12 +1597,15 @@ input:checked + .slider:before {
         left: 10px;
         right: 10px;
         gap: 6px;
+        width: auto;
     }
     
     .btn-action {
-        padding: 12px 16px;
-        font-size: 13px;
+        padding: 14px 16px;
+        font-size: 14px;
         border-radius: 10px;
+        width: 100%;
+        text-align: center;
     }
     
     .modal-content {
