@@ -435,20 +435,27 @@ function getCurrentRate() {
     return sorted[0].value;
 }
 
-// Получить курс для даты
+// Получить курс для даты (берём ближайший курс НА или ДО этой даты)
 function getRateForDate(dateStr) {
     if (data.rates.length === 0) return 1;
     
     const targetDate = new Date(dateStr);
+    targetDate.setHours(23, 59, 59, 999); // Конец дня
+    
+    // Сортируем по дате (новые первые)
     const sorted = [...data.rates].sort((a, b) => new Date(b.date) - new Date(a.date));
     
+    // Ищем курс на дату <= целевой
     for (const rate of sorted) {
-        if (new Date(rate.date) <= targetDate) {
+        const rateDate = new Date(rate.date);
+        rateDate.setHours(0, 0, 0, 0); // Начало дня
+        if (rateDate <= targetDate) {
             return rate.value;
         }
     }
     
-    return sorted[sorted.length - 1].value;
+    // Если нет курса на эту дату или раньше — возвращаем 1
+    return 1;
 }
 
 // Конвертировать сумму транзакции в рубли (динамически по текущему курсу)
