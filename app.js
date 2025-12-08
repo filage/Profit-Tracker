@@ -92,6 +92,7 @@ function initTabs() {
             document.querySelectorAll('.period-btn').forEach(b => b.classList.remove('active'));
             btn.classList.add('active');
             chartPeriod = parseInt(btn.dataset.period);
+            updateStats();
             updateChart();
         });
     });
@@ -460,12 +461,33 @@ function getAmountInRub(transaction) {
     return transaction.originalAmount * rate;
 }
 
+// Получить диапазон дат для статистики
+function getStatsDateRange() {
+    const dateFrom = document.getElementById('dateFrom').value;
+    const dateTo = document.getElementById('dateTo').value;
+    
+    // Если заданы даты фильтра — используем их
+    if (dateFrom && dateTo) {
+        return { from: dateFrom, to: dateTo };
+    }
+    
+    // Иначе используем chartPeriod (масштаб)
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const fromDate = new Date(today);
+    fromDate.setDate(today.getDate() - chartPeriod + 1);
+    
+    return {
+        from: fromDate.toISOString().split('T')[0],
+        to: today.toISOString().split('T')[0]
+    };
+}
+
 // Обновление статистики с динамическим пересчётом курса
 function updateStats() {
     const filterType = document.getElementById('itemTypeFilter').value;
     const equalize = document.getElementById('equalizeToggle').checked;
-    const dateFrom = document.getElementById('dateFrom').value;
-    const dateTo = document.getElementById('dateTo').value;
+    const { from: dateFrom, to: dateTo } = getStatsDateRange();
     
     // Фильтрация по типу
     let purchases = filterType === 'all' 
@@ -476,15 +498,9 @@ function updateStats() {
         ? [...data.sales] 
         : data.sales.filter(s => s.itemType === filterType);
     
-    // Фильтрация по датам
-    if (dateFrom) {
-        purchases = purchases.filter(p => p.date >= dateFrom);
-        sales = sales.filter(s => s.date >= dateFrom);
-    }
-    if (dateTo) {
-        purchases = purchases.filter(p => p.date <= dateTo);
-        sales = sales.filter(s => s.date <= dateTo);
-    }
+    // Фильтрация по датам (всегда применяется)
+    purchases = purchases.filter(p => p.date >= dateFrom && p.date <= dateTo);
+    sales = sales.filter(s => s.date >= dateFrom && s.date <= dateTo);
     
     // Подсчет количества
     let totalBought = purchases.reduce((sum, p) => sum + p.quantity, 0);
@@ -530,22 +546,15 @@ function renderItemStats(equalize) {
     const container = document.getElementById('itemStats');
     container.innerHTML = '<h3>Статистика по типам вещей</h3>';
     
-    const dateFrom = document.getElementById('dateFrom').value;
-    const dateTo = document.getElementById('dateTo').value;
+    const { from: dateFrom, to: dateTo } = getStatsDateRange();
     
     data.itemTypes.forEach(type => {
         let purchases = data.purchases.filter(p => p.itemType === type);
         let sales = data.sales.filter(s => s.itemType === type);
         
-        // Фильтрация по датам
-        if (dateFrom) {
-            purchases = purchases.filter(p => p.date >= dateFrom);
-            sales = sales.filter(s => s.date >= dateFrom);
-        }
-        if (dateTo) {
-            purchases = purchases.filter(p => p.date <= dateTo);
-            sales = sales.filter(s => s.date <= dateTo);
-        }
+        // Фильтрация по датам (всегда применяется)
+        purchases = purchases.filter(p => p.date >= dateFrom && p.date <= dateTo);
+        sales = sales.filter(s => s.date >= dateFrom && s.date <= dateTo);
         
         let bought = purchases.reduce((sum, p) => sum + p.quantity, 0);
         let sold = sales.reduce((sum, s) => sum + s.quantity, 0);

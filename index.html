@@ -64,6 +64,9 @@
                             <option value="all">Все</option>
                         </select>
                         <button id="manageItemsBtn" class="btn-icon" title="Управление типами">⚙️</button>
+                        <button id="exportBtn" class="btn-icon btn-export" title="Экспорт">📤</button>
+                        <button id="importBtn" class="btn-icon btn-import" title="Импорт">📥</button>
+                        <input type="file" id="importFile" accept=".json" style="display:none">
                     </div>
                     <div class="equalize-toggle">
                         <span>Приравнять покупки к продажам</span>
@@ -75,15 +78,6 @@
                 </div>
             </div>
 
-            <div class="controls filter-row">
-                <div class="control-row">
-                    <div class="data-buttons">
-                        <button id="exportBtn" class="btn-small btn-export">📤 Экспорт</button>
-                        <button id="importBtn" class="btn-small btn-import">📥 Импорт</button>
-                        <input type="file" id="importFile" accept=".json" style="display:none">
-                    </div>
-                </div>
-            </div>
 
             <div class="stats-cards">
                 <div class="stat-card income">

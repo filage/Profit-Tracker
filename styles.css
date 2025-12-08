@@ -142,7 +142,17 @@ body {
     gap: 8px;
 }
 
-.period-scale,
+.period-scale {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.period-scale .period-btn {
+    flex: 1;
+    text-align: center;
+}
+
 .date-range {
     display: flex;
     align-items: center;
