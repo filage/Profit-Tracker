@@ -1021,6 +1021,12 @@ input:checked + .slider:before {
     color: var(--text-secondary);
 }
 
+.tx-time {
+    font-size: 11px;
+    color: var(--text-secondary);
+    margin-left: 6px;
+}
+
 .detail-item .detail-qty {
     color: var(--text-secondary);
     font-size: 14px;
@@ -1041,7 +1047,8 @@ input:checked + .slider:before {
 }
 
 .detail-item .edit-btn,
-.detail-item .delete-btn {
+.detail-item .delete-btn,
+.detail-item .convert-btn {
     border: none;
     color: #fff;
     padding: 6px 10px;
@@ -1060,8 +1067,15 @@ input:checked + .slider:before {
     background: var(--gradient-red);
 }
 
+.detail-item .convert-btn {
+    background: linear-gradient(135deg, #f39c12 0%, #e67e22 100%);
+    font-size: 13px;
+    padding: 6px 12px;
+}
+
 .detail-item .edit-btn:hover,
-.detail-item .delete-btn:hover {
+.detail-item .delete-btn:hover,
+.detail-item .convert-btn:hover {
     transform: scale(1.05);
     opacity: 0.9;
 }

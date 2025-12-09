@@ -793,30 +793,29 @@ function showDayDetails(dateStr) {
         return;
     }
     
-    daySales.forEach(sale => {
-        const div = document.createElement('div');
-        div.className = 'transaction-item sale';
-        const pricePerUnit = sale.originalAmount / sale.quantity;
-        div.innerHTML = `
-            <span>${sale.itemType}</span>
-            <span>${sale.quantity} шт.</span>
-            <span>${formatMoney(getAmountInRub(sale))}</span>
-            <button class="day-edit" data-id="${sale.id}" data-type="income" data-price="${pricePerUnit}">Изменить</button>
-            <button class="day-delete" data-id="${sale.id}" data-type="income">Удалить</button>
-        `;
-        container.appendChild(div);
+    // Объединяем и сортируем по времени
+    const allTransactions = [
+        ...daySales.map(s => ({ ...s, transType: 'income' })),
+        ...dayPurchases.map(p => ({ ...p, transType: 'expense' }))
+    ].sort((a, b) => {
+        const timeA = a.time || '00:00';
+        const timeB = b.time || '00:00';
+        return timeB.localeCompare(timeA); // Новые сверху
     });
     
-    dayPurchases.forEach(purchase => {
+    allTransactions.forEach(tx => {
         const div = document.createElement('div');
-        div.className = 'transaction-item expense';
-        const pricePerUnit = purchase.originalAmount / purchase.quantity;
+        div.className = `transaction-item ${tx.transType === 'income' ? 'sale' : 'expense'}`;
+        const pricePerUnit = tx.originalAmount / tx.quantity;
+        const timeStr = tx.time ? `<span class="tx-time">${tx.time}</span>` : '';
+        const sign = tx.transType === 'income' ? '' : '-';
+        
         div.innerHTML = `
-            <span>${purchase.itemType}</span>
-            <span>${purchase.quantity} шт.</span>
-            <span>-${formatMoney(getAmountInRub(purchase))}</span>
-            <button class="day-edit" data-id="${purchase.id}" data-type="expense" data-price="${pricePerUnit}">Изменить</button>
-            <button class="day-delete" data-id="${purchase.id}" data-type="expense">Удалить</button>
+            <span>${tx.itemType} ${timeStr}</span>
+            <span>${tx.quantity} шт.</span>
+            <span>${sign}${formatMoney(getAmountInRub(tx))}</span>
+            <button class="day-edit" data-id="${tx.id}" data-type="${tx.transType === 'income' ? 'income' : 'expense'}" data-price="${pricePerUnit}">Изменить</button>
+            <button class="day-delete" data-id="${tx.id}" data-type="${tx.transType === 'income' ? 'income' : 'expense'}">Удалить</button>
         `;
         container.appendChild(div);
     });
@@ -1111,8 +1110,12 @@ function showDetails(type, filterItemType = null) {
         transactions = [...sales, ...purchases];
     }
     
-    // Сортировка по дате (новые сверху)
-    transactions.sort((a, b) => new Date(b.date) - new Date(a.date));
+    // Сортировка по дате и времени (новые сверху)
+    transactions.sort((a, b) => {
+        const dateA = new Date(a.date + (a.time ? 'T' + a.time : 'T00:00'));
+        const dateB = new Date(b.date + (b.time ? 'T' + b.time : 'T00:00'));
+        return dateB - dateA;
+    });
     
     title.textContent = titleText;
     
@@ -1146,14 +1149,25 @@ function showDetails(type, filterItemType = null) {
         transactions.forEach(t => {
             const div = document.createElement('div');
             div.className = `detail-item ${t.transType}`;
+            
+            // Формируем строку даты и времени
+            const timeStr = t.time ? ` ${t.time}` : '';
+            const currencyLabel = t.currency === 'CNY' ? ' (¥)' : '';
+            
+            // Кнопка конвертации только для расходов в рублях
+            const convertBtn = (t.transType === 'expense' && t.currency === 'RUB') 
+                ? `<button class="convert-btn" data-id="${t.id}" title="Конвертировать в юани">¥</button>`
+                : '';
+            
             div.innerHTML = `
                 <div class="detail-info">
                     <div class="detail-type">${t.itemType}</div>
-                    <div class="detail-date">${formatDate(t.date)} ${t.currency === 'CNY' ? '(¥)' : ''}</div>
+                    <div class="detail-date">${formatDate(t.date)}${timeStr}${currencyLabel}</div>
                 </div>
                 <div class="detail-qty">${t.quantity} шт.</div>
                 <div class="detail-amount">${t.transType === 'income' ? '+' : '-'}${formatMoney(getAmountInRub(t))}</div>
                 <div class="detail-actions">
+                    ${convertBtn}
                     <button class="edit-btn" data-id="${t.id}" data-type="${t.transType}">Изменить</button>
                     <button class="delete-btn" data-id="${t.id}" data-type="${t.transType}">Удалить</button>
                 </div>
@@ -1195,6 +1209,32 @@ function showDetails(type, filterItemType = null) {
                 window._editDetailsParams = { type, filterItemType };
                 
                 document.getElementById('editTxModal').classList.remove('hidden');
+            });
+        });
+        
+        // Конвертация валюты (RUB -> CNY)
+        list.querySelectorAll('.convert-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const idStr = btn.dataset.id;
+                const purchase = data.purchases.find(p => String(p.id) === idStr);
+                if (!purchase || purchase.currency !== 'RUB') return;
+                
+                const rate = getRateForDate(purchase.date);
+                if (rate <= 0) {
+                    alert('Курс для этой даты не найден!');
+                    return;
+                }
+                
+                // Конвертируем RUB в CNY
+                const amountInCny = purchase.originalAmount / rate;
+                purchase.originalAmount = Math.round(amountInCny * 100) / 100;
+                purchase.currency = 'CNY';
+                
+                saveData();
+                updateStats();
+                updateChart();
+                renderCalendar();
+                showDetails(type, filterItemType);
             });
         });
         
