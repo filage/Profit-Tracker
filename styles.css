@@ -1067,15 +1067,27 @@ input:checked + .slider:before {
     background: var(--gradient-red);
 }
 
-.detail-item .convert-btn {
+.currency-toggle-btn {
+    width: 100%;
+    padding: 12px 20px;
     background: linear-gradient(135deg, #f39c12 0%, #e67e22 100%);
-    font-size: 13px;
-    padding: 6px 12px;
+    border: none;
+    border-radius: 12px;
+    color: #fff;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    margin-top: 10px;
+}
+
+.currency-toggle-btn:hover {
+    transform: scale(1.02);
+    box-shadow: 0 4px 15px rgba(243, 156, 18, 0.4);
 }
 
 .detail-item .edit-btn:hover,
-.detail-item .delete-btn:hover,
-.detail-item .convert-btn:hover {
+.detail-item .delete-btn:hover {
     transform: scale(1.05);
     opacity: 0.9;
 }

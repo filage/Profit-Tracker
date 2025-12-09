@@ -219,12 +219,13 @@ function initModals() {
 
 // Инициализация форм
 function initForms() {
-    // Форма покупки - с датой
+    // Форма покупки - с датой и временем
     document.getElementById('purchaseForm').addEventListener('submit', (e) => {
         e.preventDefault();
         
         const itemType = document.getElementById('purchaseItemType').value;
         const purchaseDate = document.getElementById('purchaseDate').value;
+        const purchaseTime = document.getElementById('purchaseTime').value || '';
         const currency = document.getElementById('purchaseCurrency').value;
         const quantity = parseInt(document.getElementById('purchaseQuantity').value);
         const amount = parseFloat(document.getElementById('purchaseAmount').value);
@@ -238,22 +239,25 @@ function initForms() {
             currency,
             originalAmount: totalAmount,
             quantity,
-            date: purchaseDate
+            date: purchaseDate,
+            time: purchaseTime
         });
         
         saveData();
         updateStats();
         updateChart();
+        renderCalendar();
         document.getElementById('purchaseModal').classList.add('hidden');
         document.getElementById('purchaseForm').reset();
     });
     
-    // Форма продажи - НЕ конвертируем сразу, храним оригинал
+    // Форма продажи - с датой и временем
     document.getElementById('saleForm').addEventListener('submit', (e) => {
         e.preventDefault();
         
         const itemType = document.getElementById('saleItemType').value;
         const saleDate = document.getElementById('saleDate').value;
+        const saleTime = document.getElementById('saleTime').value || '';
         const currency = document.getElementById('saleCurrency').value;
         const quantity = parseInt(document.getElementById('saleQuantity').value);
         const amount = parseFloat(document.getElementById('saleAmount').value);
@@ -267,7 +271,8 @@ function initForms() {
             currency,
             originalAmount: totalAmount,
             quantity,
-            date: saleDate
+            date: saleDate,
+            time: saleTime
         });
         
         saveData();
@@ -312,6 +317,7 @@ function initForms() {
         
         const newItemType = document.getElementById('editTxItemType').value;
         const newDate = document.getElementById('editTxDateInput').value;
+        const newTime = document.getElementById('editTxTimeInput').value || '';
         const newCurrency = document.getElementById('editTxCurrency').value;
         const newPricePerUnit = parseFloat(document.getElementById('editTxAmount').value);
         const newQty = parseInt(document.getElementById('editTxQuantity').value, 10);
@@ -340,6 +346,7 @@ function initForms() {
         // Обновляем все поля
         tx.itemType = newItemType;
         tx.date = newDate;
+        tx.time = newTime;
         tx.currency = newCurrency;
         tx.originalAmount = newPricePerUnit * newQty;
         tx.quantity = newQty;
@@ -844,6 +851,7 @@ function showDayDetails(dateStr) {
             document.getElementById('editTxAmount').value = pricePerUnit.toFixed(2);
             document.getElementById('editTxQuantity').value = tx.quantity;
             document.getElementById('editTxDateInput').value = tx.date;
+            document.getElementById('editTxTimeInput').value = tx.time || '';
             document.getElementById('editTxCurrency').value = tx.currency || 'RUB';
             document.getElementById('editTxId').value = idStr;
             document.getElementById('editTxType').value = transType;
@@ -1078,6 +1086,9 @@ function updatePointsVisibility() {
 
 // ==================== ДЕТАЛИЗАЦИЯ ====================
 
+// Глобальная переменная для режима отображения валюты в детализации
+let detailsShowCNY = false;
+
 function showDetails(type, filterItemType = null) {
     const modal = document.getElementById('detailsModal');
     const title = document.getElementById('detailsTitle');
@@ -1126,6 +1137,11 @@ function showDetails(type, filterItemType = null) {
         .reduce((sum, t) => sum + getAmountInRub(t), 0);
     const totalQty = transactions.reduce((sum, t) => sum + t.quantity, 0);
     
+    // Кнопка переключения валюты (только для расходов)
+    const currencyToggle = (type === 'expense' || type === 'all') 
+        ? `<button id="currencyToggleBtn" class="currency-toggle-btn">${detailsShowCNY ? '¥ Юани' : '₽ Рубли'}</button>`
+        : '';
+    
     summary.innerHTML = `
         <div class="summary-card income">
             <div class="label">Доход</div>
@@ -1139,7 +1155,17 @@ function showDetails(type, filterItemType = null) {
             <div class="label">Всего операций</div>
             <div class="value" style="color: var(--text-primary)">${transactions.length} (${totalQty} шт.)</div>
         </div>
+        ${currencyToggle}
     `;
+    
+    // Обработчик кнопки переключения валюты
+    const toggleBtn = document.getElementById('currencyToggleBtn');
+    if (toggleBtn) {
+        toggleBtn.addEventListener('click', () => {
+            detailsShowCNY = !detailsShowCNY;
+            showDetails(type, filterItemType); // Перерисовываем
+        });
+    }
     
     // Список транзакций
     list.innerHTML = '';
@@ -1151,23 +1177,37 @@ function showDetails(type, filterItemType = null) {
             div.className = `detail-item ${t.transType}`;
             
             // Формируем строку даты и времени
-            const timeStr = t.time ? ` ${t.time}` : '';
-            const currencyLabel = t.currency === 'CNY' ? ' (¥)' : '';
+            const timeStr = t.time ? t.time : '';
             
-            // Кнопка конвертации только для расходов в рублях
-            const convertBtn = (t.transType === 'expense' && t.currency === 'RUB') 
-                ? `<button class="convert-btn" data-id="${t.id}" title="Конвертировать в юани">¥</button>`
-                : '';
+            // Определяем отображаемую сумму
+            let displayAmount;
+            let currencySymbol;
+            if (t.transType === 'expense' && detailsShowCNY) {
+                // Показываем в юанях
+                if (t.currency === 'CNY') {
+                    displayAmount = t.originalAmount;
+                } else {
+                    // Конвертируем из рублей в юани по курсу на дату
+                    const rate = getRateForDate(t.date);
+                    displayAmount = rate > 0 ? t.originalAmount / rate : t.originalAmount;
+                }
+                currencySymbol = '¥';
+            } else {
+                // Показываем в рублях
+                displayAmount = getAmountInRub(t);
+                currencySymbol = '₽';
+            }
+            
+            const sign = t.transType === 'income' ? '+' : '-';
             
             div.innerHTML = `
                 <div class="detail-info">
                     <div class="detail-type">${t.itemType}</div>
-                    <div class="detail-date">${formatDate(t.date)}${timeStr}${currencyLabel}</div>
+                    <div class="detail-date">${formatDate(t.date)}${timeStr ? ' ' + timeStr : ''}</div>
                 </div>
                 <div class="detail-qty">${t.quantity} шт.</div>
-                <div class="detail-amount">${t.transType === 'income' ? '+' : '-'}${formatMoney(getAmountInRub(t))}</div>
+                <div class="detail-amount">${sign}${displayAmount.toFixed(2)} ${currencySymbol}</div>
                 <div class="detail-actions">
-                    ${convertBtn}
                     <button class="edit-btn" data-id="${t.id}" data-type="${t.transType}">Изменить</button>
                     <button class="delete-btn" data-id="${t.id}" data-type="${t.transType}">Удалить</button>
                 </div>
@@ -1199,6 +1239,7 @@ function showDetails(type, filterItemType = null) {
                 document.getElementById('editTxAmount').value = pricePerUnit.toFixed(2);
                 document.getElementById('editTxQuantity').value = tx.quantity;
                 document.getElementById('editTxDateInput').value = tx.date;
+                document.getElementById('editTxTimeInput').value = tx.time || '';
                 document.getElementById('editTxCurrency').value = tx.currency || 'RUB';
                 document.getElementById('editTxId').value = idStr;
                 document.getElementById('editTxType').value = transType;
@@ -1209,32 +1250,6 @@ function showDetails(type, filterItemType = null) {
                 window._editDetailsParams = { type, filterItemType };
                 
                 document.getElementById('editTxModal').classList.remove('hidden');
-            });
-        });
-        
-        // Конвертация валюты (RUB -> CNY)
-        list.querySelectorAll('.convert-btn').forEach(btn => {
-            btn.addEventListener('click', () => {
-                const idStr = btn.dataset.id;
-                const purchase = data.purchases.find(p => String(p.id) === idStr);
-                if (!purchase || purchase.currency !== 'RUB') return;
-                
-                const rate = getRateForDate(purchase.date);
-                if (rate <= 0) {
-                    alert('Курс для этой даты не найден!');
-                    return;
-                }
-                
-                // Конвертируем RUB в CNY
-                const amountInCny = purchase.originalAmount / rate;
-                purchase.originalAmount = Math.round(amountInCny * 100) / 100;
-                purchase.currency = 'CNY';
-                
-                saveData();
-                updateStats();
-                updateChart();
-                renderCalendar();
-                showDetails(type, filterItemType);
             });
         });
         
