@@ -1027,6 +1027,33 @@ input:checked + .slider:before {
     margin-left: 6px;
 }
 
+.tx-status {
+    font-size: 10px;
+    padding: 2px 6px;
+    border-radius: 4px;
+    margin-left: 8px;
+}
+
+.tx-status.tx-used {
+    background: rgba(46, 204, 113, 0.2);
+    color: var(--accent-green);
+}
+
+.tx-status.tx-partial {
+    background: rgba(243, 156, 18, 0.2);
+    color: #f39c12;
+}
+
+.tx-status.tx-carryover {
+    background: rgba(155, 89, 182, 0.2);
+    color: #9b59b6;
+}
+
+.transaction-item.carryover {
+    opacity: 0.6;
+    border-left: 3px solid #9b59b6;
+}
+
 .detail-item .detail-qty {
     color: var(--text-secondary);
     font-size: 14px;

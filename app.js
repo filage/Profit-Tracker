@@ -788,17 +788,26 @@ function renderCalendar() {
 // Кэш для расчёта прибыли с переносом остатка
 let calendarProfitCache = null;
 let calendarProfitCacheKey = null;
+let calendarCarryoverState = null; // Состояние остатков для отображения в деталях дня
+
+// Функция сортировки по дате+времени (от старых к новым)
+function sortByDateTime(a, b) {
+    const dateCompare = a.date.localeCompare(b.date);
+    if (dateCompare !== 0) return dateCompare;
+    // Сортируем по времени (если есть)
+    const timeA = a.time || '00:00';
+    const timeB = b.time || '00:00';
+    return timeA.localeCompare(timeB);
+}
 
 // Рассчитать прибыль для всех дней с переносом остатка покупок
+// КАЛЕНДАРЬ ВСЕГДА использует приравнивание
 function calculateAllDaysProfitWithCarryover() {
-    const equalize = document.getElementById('equalizeToggle')?.checked || false;
-    
     // Ключ для кэша
     const cacheKey = JSON.stringify({
-        sales: data.sales.map(s => s.id),
-        purchases: data.purchases.map(p => p.id),
-        rates: data.rates,
-        equalize
+        sales: data.sales.map(s => s.id + s.date + s.time),
+        purchases: data.purchases.map(p => p.id + p.date + p.time),
+        rates: data.rates
     });
     
     if (calendarProfitCacheKey === cacheKey && calendarProfitCache) {
@@ -807,39 +816,22 @@ function calculateAllDaysProfitWithCarryover() {
     
     const result = {};
     
-    if (!equalize) {
-        // Без приравнивания - просто считаем по дням
-        const allDates = new Set([
-            ...data.sales.map(s => s.date),
-            ...data.purchases.map(p => p.date)
-        ]);
-        
-        allDates.forEach(dateStr => {
-            const daySales = data.sales.filter(s => s.date === dateStr);
-            const dayPurchases = data.purchases.filter(p => p.date === dateStr);
-            const income = daySales.reduce((sum, s) => sum + getAmountInRub(s), 0);
-            const expense = dayPurchases.reduce((sum, p) => sum + getAmountInRub(p), 0);
-            result[dateStr] = { hasData: true, profit: income - expense };
-        });
-        
-        calendarProfitCache = result;
-        calendarProfitCacheKey = cacheKey;
-        return result;
-    }
-    
-    // С приравниванием - перенос остатка покупок по типам
     // Собираем все уникальные даты и сортируем
     const allDates = [...new Set([
         ...data.sales.map(s => s.date),
         ...data.purchases.map(p => p.date)
     ])].sort();
     
-    // Остаток покупок по типам (количество и стоимость в очереди FIFO)
-    const carryover = {}; // { itemType: [{ qty, costPerUnit, date }] }
+    // Остаток покупок по типам (очередь FIFO с датой+временем)
+    // { itemType: [{ id, qty, costPerUnit, date, time }] }
+    const carryover = {};
     
     data.itemTypes.forEach(type => {
         carryover[type] = [];
     });
+    
+    // Для отображения: какие покупки использованы в какой день
+    const usedPurchases = {}; // { purchaseId: { usedQty, usedInDate } }
     
     allDates.forEach(dateStr => {
         let dayIncome = 0;
@@ -847,22 +839,34 @@ function calculateAllDaysProfitWithCarryover() {
         
         // Обрабатываем каждый тип отдельно
         data.itemTypes.forEach(type => {
-            // Добавляем покупки этого дня в очередь (FIFO)
-            const dayPurchases = data.purchases.filter(p => p.date === dateStr && p.itemType === type);
+            // Добавляем покупки этого дня в очередь (FIFO), сортируем по времени
+            const dayPurchases = data.purchases
+                .filter(p => p.date === dateStr && p.itemType === type)
+                .sort(sortByDateTime);
+            
             dayPurchases.forEach(p => {
                 const costPerUnit = getAmountInRub(p) / p.quantity;
-                carryover[type].push({ qty: p.quantity, costPerUnit, date: p.date });
+                carryover[type].push({ 
+                    id: p.id,
+                    qty: p.quantity, 
+                    costPerUnit, 
+                    date: p.date,
+                    time: p.time || '00:00'
+                });
             });
             
-            // Продажи этого дня
-            const daySales = data.sales.filter(s => s.date === dateStr && s.itemType === type);
+            // Продажи этого дня, сортируем по времени
+            const daySales = data.sales
+                .filter(s => s.date === dateStr && s.itemType === type)
+                .sort(sortByDateTime);
+            
             const soldQty = daySales.reduce((sum, s) => sum + s.quantity, 0);
             const soldAmount = daySales.reduce((sum, s) => sum + getAmountInRub(s), 0);
             
             if (soldQty > 0) {
                 dayIncome += soldAmount;
                 
-                // Списываем из очереди покупок (FIFO)
+                // Списываем из очереди покупок (FIFO - самые старые первые)
                 let remainingToSell = soldQty;
                 while (remainingToSell > 0 && carryover[type].length > 0) {
                     const oldest = carryover[type][0];
@@ -871,11 +875,16 @@ function calculateAllDaysProfitWithCarryover() {
                     oldest.qty -= takeQty;
                     remainingToSell -= takeQty;
                     
+                    // Отмечаем что эта покупка использована
+                    if (!usedPurchases[oldest.id]) {
+                        usedPurchases[oldest.id] = { usedQty: 0, usedInDate: dateStr };
+                    }
+                    usedPurchases[oldest.id].usedQty += takeQty;
+                    
                     if (oldest.qty <= 0) {
                         carryover[type].shift();
                     }
                 }
-                // Если продаж больше чем покупок - остаток продаж без расхода (прибыль)
             }
         });
         
@@ -884,30 +893,15 @@ function calculateAllDaysProfitWithCarryover() {
         }
     });
     
+    // Сохраняем состояние для отображения в деталях дня
+    calendarCarryoverState = { usedPurchases, carryover };
     calendarProfitCache = result;
     calendarProfitCacheKey = cacheKey;
     return result;
 }
 
+// Календарь ВСЕГДА использует приравнивание
 function calculateDayProfit(dateStr) {
-    const equalizeEl = document.getElementById('equalizeToggle');
-    const equalize = equalizeEl ? equalizeEl.checked : false;
-    
-    if (!equalize) {
-        const daySales = data.sales.filter(s => s.date === dateStr);
-        const dayPurchases = data.purchases.filter(p => p.date === dateStr);
-        
-        if (daySales.length === 0 && dayPurchases.length === 0) {
-            return { hasData: false, profit: 0 };
-        }
-        
-        const income = daySales.reduce((sum, s) => sum + getAmountInRub(s), 0);
-        const expense = dayPurchases.reduce((sum, p) => sum + getAmountInRub(p), 0);
-        
-        return { hasData: true, profit: income - expense };
-    }
-    
-    // С приравниванием - берём из кэша
     const allProfits = calculateAllDaysProfitWithCarryover();
     return allProfits[dateStr] || { hasData: false, profit: 0 };
 }
@@ -933,25 +927,47 @@ function showDayDetails(dateStr) {
         return;
     }
     
-    // Объединяем и сортируем по времени
+    // Убедимся что кэш рассчитан
+    calculateAllDaysProfitWithCarryover();
+    const state = calendarCarryoverState || { usedPurchases: {}, carryover: {} };
+    
+    // Объединяем и сортируем по времени (от старых к новым)
     const allTransactions = [
         ...daySales.map(s => ({ ...s, transType: 'income' })),
         ...dayPurchases.map(p => ({ ...p, transType: 'expense' }))
     ].sort((a, b) => {
         const timeA = a.time || '00:00';
         const timeB = b.time || '00:00';
-        return timeB.localeCompare(timeA); // Новые сверху
+        return timeA.localeCompare(timeB); // Старые сверху
     });
     
     allTransactions.forEach(tx => {
         const div = document.createElement('div');
-        div.className = `transaction-item ${tx.transType === 'income' ? 'sale' : 'expense'}`;
+        let statusClass = '';
+        let statusLabel = '';
+        
+        if (tx.transType === 'expense') {
+            // Проверяем использована ли эта покупка
+            const usedInfo = state.usedPurchases[tx.id];
+            if (usedInfo && usedInfo.usedQty >= tx.quantity) {
+                statusClass = 'used';
+                statusLabel = '<span class="tx-status tx-used">✓ использовано</span>';
+            } else if (usedInfo && usedInfo.usedQty > 0) {
+                statusClass = 'partial';
+                statusLabel = `<span class="tx-status tx-partial">частично (${usedInfo.usedQty}/${tx.quantity})</span>`;
+            } else {
+                statusClass = 'carryover';
+                statusLabel = '<span class="tx-status tx-carryover">→ перенос</span>';
+            }
+        }
+        
+        div.className = `transaction-item ${tx.transType === 'income' ? 'sale' : 'expense'} ${statusClass}`;
         const pricePerUnit = tx.originalAmount / tx.quantity;
         const timeStr = tx.time ? `<span class="tx-time">${tx.time}</span>` : '';
         const sign = tx.transType === 'income' ? '' : '-';
         
         div.innerHTML = `
-            <span>${tx.itemType} ${timeStr}</span>
+            <span>${tx.itemType} ${timeStr} ${statusLabel}</span>
             <span>${tx.quantity} шт.</span>
             <span>${sign}${formatMoney(getAmountInRub(tx))}</span>
             <button class="day-edit" data-id="${tx.id}" data-type="${tx.transType === 'income' ? 'income' : 'expense'}" data-price="${pricePerUnit}">Изменить</button>
