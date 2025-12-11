@@ -22,6 +22,9 @@ function loadData() {
 // Сохранение данных в localStorage
 function saveData() {
     localStorage.setItem('profitTrackerData', JSON.stringify(data));
+    // Сбрасываем кэш прибыли при изменении данных
+    calendarProfitCache = null;
+    calendarProfitCacheKey = null;
 }
 
 // Текущий месяц для календаря
@@ -532,30 +535,64 @@ function updateStats() {
     // Суммы с динамическим пересчётом по курсу
     let totalSaleAmount = sales.reduce((sum, s) => sum + getAmountInRub(s), 0);
     
-    // Приравнивание: убираем самые новые покупки
+    // Приравнивание: по каждому типу min(покупки, продажи)
     let displayBought = totalBought;
     let displaySold = totalSold;
     let totalExpense = 0;
+    let totalIncome = 0;
     
-    if (equalize && totalBought > totalSold && totalSold > 0) {
-        // Сортируем покупки по дате (старые первые)
-        const sortedPurchases = [...purchases].sort((a, b) => a.date.localeCompare(b.date));
+    if (equalize) {
+        // Считаем по каждому типу отдельно
+        const types = filterType === 'all' ? data.itemTypes : [filterType];
         
-        let remainingQty = totalSold;
-        for (const p of sortedPurchases) {
-            if (remainingQty <= 0) break;
+        types.forEach(type => {
+            const typePurchases = purchases.filter(p => p.itemType === type);
+            const typeSales = sales.filter(s => s.itemType === type);
             
-            const pricePerUnit = getAmountInRub(p) / p.quantity;
-            const takeQty = Math.min(p.quantity, remainingQty);
-            totalExpense += takeQty * pricePerUnit;
-            remainingQty -= takeQty;
-        }
-        displayBought = totalSold;
+            const boughtQty = typePurchases.reduce((sum, p) => sum + p.quantity, 0);
+            const soldQty = typeSales.reduce((sum, s) => sum + s.quantity, 0);
+            const matchedQty = Math.min(boughtQty, soldQty);
+            
+            if (matchedQty > 0) {
+                // Берём первые matchedQty покупок (FIFO по дате)
+                const sortedPurchases = [...typePurchases].sort((a, b) => a.date.localeCompare(b.date));
+                let remainingQty = matchedQty;
+                for (const p of sortedPurchases) {
+                    if (remainingQty <= 0) break;
+                    const pricePerUnit = getAmountInRub(p) / p.quantity;
+                    const takeQty = Math.min(p.quantity, remainingQty);
+                    totalExpense += takeQty * pricePerUnit;
+                    remainingQty -= takeQty;
+                }
+                
+                // Берём первые matchedQty продаж (FIFO по дате)
+                const sortedSales = [...typeSales].sort((a, b) => a.date.localeCompare(b.date));
+                remainingQty = matchedQty;
+                for (const s of sortedSales) {
+                    if (remainingQty <= 0) break;
+                    const pricePerUnit = getAmountInRub(s) / s.quantity;
+                    const takeQty = Math.min(s.quantity, remainingQty);
+                    totalIncome += takeQty * pricePerUnit;
+                    remainingQty -= takeQty;
+                }
+            }
+        });
+        
+        // Пересчитываем отображаемое количество
+        displayBought = 0;
+        displaySold = 0;
+        types.forEach(type => {
+            const boughtQty = purchases.filter(p => p.itemType === type).reduce((sum, p) => sum + p.quantity, 0);
+            const soldQty = sales.filter(s => s.itemType === type).reduce((sum, s) => sum + s.quantity, 0);
+            const matched = Math.min(boughtQty, soldQty);
+            displayBought += matched;
+            displaySold += matched;
+        });
     } else {
         totalExpense = purchases.reduce((sum, p) => sum + getAmountInRub(p), 0);
+        totalIncome = totalSaleAmount;
     }
     
-    let totalIncome = totalSaleAmount;
     let profit = totalIncome - totalExpense;
     
     // Обновление UI
@@ -596,21 +633,43 @@ function renderItemStats(equalize) {
         
         if (bought === 0 && sold === 0) return;
         
-        // Приравнивание: убираем самые новые покупки
-        if (equalize && bought > sold && sold > 0) {
-            const sortedPurchases = [...purchases].sort((a, b) => a.date.localeCompare(b.date));
+        // Приравнивание: min(покупки, продажи)
+        if (equalize) {
+            const matchedQty = Math.min(bought, sold);
             
-            let remainingQty = sold;
-            boughtAmount = 0;
-            for (const p of sortedPurchases) {
-                if (remainingQty <= 0) break;
+            if (matchedQty > 0) {
+                // Покупки FIFO
+                const sortedPurchases = [...purchases].sort((a, b) => a.date.localeCompare(b.date));
+                let remainingQty = matchedQty;
+                boughtAmount = 0;
+                for (const p of sortedPurchases) {
+                    if (remainingQty <= 0) break;
+                    const pricePerUnit = getAmountInRub(p) / p.quantity;
+                    const takeQty = Math.min(p.quantity, remainingQty);
+                    boughtAmount += takeQty * pricePerUnit;
+                    remainingQty -= takeQty;
+                }
                 
-                const pricePerUnit = getAmountInRub(p) / p.quantity;
-                const takeQty = Math.min(p.quantity, remainingQty);
-                boughtAmount += takeQty * pricePerUnit;
-                remainingQty -= takeQty;
+                // Продажи FIFO
+                const sortedSales = [...sales].sort((a, b) => a.date.localeCompare(b.date));
+                remainingQty = matchedQty;
+                soldAmount = 0;
+                for (const s of sortedSales) {
+                    if (remainingQty <= 0) break;
+                    const pricePerUnit = getAmountInRub(s) / s.quantity;
+                    const takeQty = Math.min(s.quantity, remainingQty);
+                    soldAmount += takeQty * pricePerUnit;
+                    remainingQty -= takeQty;
+                }
+                
+                bought = matchedQty;
+                sold = matchedQty;
+            } else {
+                boughtAmount = 0;
+                soldAmount = 0;
+                bought = 0;
+                sold = 0;
             }
-            bought = sold;
         }
         
         const profit = soldAmount - boughtAmount;
@@ -726,15 +785,118 @@ function renderCalendar() {
     }
 }
 
-function calculateDayProfit(dateStr) {
-    const daySales = data.sales.filter(s => s.date === dateStr);
-    const dayPurchases = data.purchases.filter(p => p.date === dateStr);
+// Кэш для расчёта прибыли с переносом остатка
+let calendarProfitCache = null;
+let calendarProfitCacheKey = null;
+
+// Рассчитать прибыль для всех дней с переносом остатка покупок
+function calculateAllDaysProfitWithCarryover() {
+    const equalize = document.getElementById('equalizeToggle')?.checked || false;
     
+    // Ключ для кэша
+    const cacheKey = JSON.stringify({
+        sales: data.sales.map(s => s.id),
+        purchases: data.purchases.map(p => p.id),
+        rates: data.rates,
+        equalize
+    });
+    
+    if (calendarProfitCacheKey === cacheKey && calendarProfitCache) {
+        return calendarProfitCache;
+    }
+    
+    const result = {};
+    
+    if (!equalize) {
+        // Без приравнивания - просто считаем по дням
+        const allDates = new Set([
+            ...data.sales.map(s => s.date),
+            ...data.purchases.map(p => p.date)
+        ]);
+        
+        allDates.forEach(dateStr => {
+            const daySales = data.sales.filter(s => s.date === dateStr);
+            const dayPurchases = data.purchases.filter(p => p.date === dateStr);
+            const income = daySales.reduce((sum, s) => sum + getAmountInRub(s), 0);
+            const expense = dayPurchases.reduce((sum, p) => sum + getAmountInRub(p), 0);
+            result[dateStr] = { hasData: true, profit: income - expense };
+        });
+        
+        calendarProfitCache = result;
+        calendarProfitCacheKey = cacheKey;
+        return result;
+    }
+    
+    // С приравниванием - перенос остатка покупок по типам
+    // Собираем все уникальные даты и сортируем
+    const allDates = [...new Set([
+        ...data.sales.map(s => s.date),
+        ...data.purchases.map(p => p.date)
+    ])].sort();
+    
+    // Остаток покупок по типам (количество и стоимость в очереди FIFO)
+    const carryover = {}; // { itemType: [{ qty, costPerUnit, date }] }
+    
+    data.itemTypes.forEach(type => {
+        carryover[type] = [];
+    });
+    
+    allDates.forEach(dateStr => {
+        let dayIncome = 0;
+        let dayExpense = 0;
+        
+        // Обрабатываем каждый тип отдельно
+        data.itemTypes.forEach(type => {
+            // Добавляем покупки этого дня в очередь (FIFO)
+            const dayPurchases = data.purchases.filter(p => p.date === dateStr && p.itemType === type);
+            dayPurchases.forEach(p => {
+                const costPerUnit = getAmountInRub(p) / p.quantity;
+                carryover[type].push({ qty: p.quantity, costPerUnit, date: p.date });
+            });
+            
+            // Продажи этого дня
+            const daySales = data.sales.filter(s => s.date === dateStr && s.itemType === type);
+            const soldQty = daySales.reduce((sum, s) => sum + s.quantity, 0);
+            const soldAmount = daySales.reduce((sum, s) => sum + getAmountInRub(s), 0);
+            
+            if (soldQty > 0) {
+                dayIncome += soldAmount;
+                
+                // Списываем из очереди покупок (FIFO)
+                let remainingToSell = soldQty;
+                while (remainingToSell > 0 && carryover[type].length > 0) {
+                    const oldest = carryover[type][0];
+                    const takeQty = Math.min(oldest.qty, remainingToSell);
+                    dayExpense += takeQty * oldest.costPerUnit;
+                    oldest.qty -= takeQty;
+                    remainingToSell -= takeQty;
+                    
+                    if (oldest.qty <= 0) {
+                        carryover[type].shift();
+                    }
+                }
+                // Если продаж больше чем покупок - остаток продаж без расхода (прибыль)
+            }
+        });
+        
+        if (dayIncome !== 0 || dayExpense !== 0) {
+            result[dateStr] = { hasData: true, profit: dayIncome - dayExpense };
+        }
+    });
+    
+    calendarProfitCache = result;
+    calendarProfitCacheKey = cacheKey;
+    return result;
+}
+
+function calculateDayProfit(dateStr) {
     const equalizeEl = document.getElementById('equalizeToggle');
     const equalize = equalizeEl ? equalizeEl.checked : false;
     
-    // Без приравнивания: просто деньги по дням
     if (!equalize) {
+        const daySales = data.sales.filter(s => s.date === dateStr);
+        const dayPurchases = data.purchases.filter(p => p.date === dateStr);
+        
         if (daySales.length === 0 && dayPurchases.length === 0) {
             return { hasData: false, profit: 0 };
         }
@@ -745,38 +907,9 @@ function calculateDayProfit(dateStr) {
         return { hasData: true, profit: income - expense };
     }
     
-    // С приравниванием: распределяем расходы по датам покупок FIFO по типам
-    const equalizedCostByDate = {};
-    
-    data.itemTypes.forEach(type => {
-        const typePurchases = data.purchases
-            .filter(p => p.itemType === type)
-            .sort((a, b) => new Date(a.date) - new Date(b.date));
-        const typeSales = data.sales.filter(s => s.itemType === type);
-        const totalSoldQty = typeSales.reduce((sum, s) => sum + s.quantity, 0);
-        let remaining = totalSoldQty;
-        
-        typePurchases.forEach(p => {
-            if (remaining <= 0) return;
-            const useQty = Math.min(p.quantity, remaining);
-            if (useQty <= 0) return;
-            
-            const fullCost = getAmountInRub(p);
-            const costPart = fullCost * (useQty / p.quantity);
-            remaining -= useQty;
-            
-            if (!equalizedCostByDate[p.date]) {
-                equalizedCostByDate[p.date] = 0;
-            }
-            equalizedCostByDate[p.date] += costPart;
-        });
-    });
-    
-    const incomeEqualized = daySales.reduce((sum, s) => sum + getAmountInRub(s), 0);
-    const expenseEqualized = equalizedCostByDate[dateStr] || 0;
-    
-    const hasAny = incomeEqualized !== 0 || expenseEqualized !== 0;
-    return { hasData: hasAny, profit: incomeEqualized - expenseEqualized };
+    // С приравниванием - берём из кэша
+    const allProfits = calculateAllDaysProfitWithCarryover();
+    return allProfits[dateStr] || { hasData: false, profit: 0 };
 }
 
 // Показать детали дня
