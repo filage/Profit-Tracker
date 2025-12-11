@@ -831,11 +831,24 @@ function calculateAllDaysProfitWithCarryover() {
     });
     
     // Для отображения: какие покупки использованы в какой день
-    const usedPurchases = {}; // { purchaseId: { usedQty, usedInDate } }
+    // { purchaseId: { totalUsed, byDate: { dateStr: usedQty } } }
+    const usedPurchases = {};
+    // Какие покупки перенесены на какой день (остаток на начало дня)
+    // { dateStr: [{ id, qty, costPerUnit, originalDate }] }
+    const carryoverByDate = {};
     
     allDates.forEach(dateStr => {
         let dayIncome = 0;
         let dayExpense = 0;
+        
+        // Сохраняем состояние очереди на начало дня (для отображения переносов)
+        carryoverByDate[dateStr] = {};
+        data.itemTypes.forEach(type => {
+            // Копируем текущий остаток (переносы с предыдущих дней)
+            carryoverByDate[dateStr][type] = carryover[type]
+                .filter(c => c.qty > 0)
+                .map(c => ({ ...c }));
+        });
         
         // Обрабатываем каждый тип отдельно
         data.itemTypes.forEach(type => {
@@ -875,11 +888,15 @@ function calculateAllDaysProfitWithCarryover() {
                     oldest.qty -= takeQty;
                     remainingToSell -= takeQty;
                     
-                    // Отмечаем что эта покупка использована
+                    // Отмечаем что эта покупка использована В ЭТОТ ДЕНЬ
                     if (!usedPurchases[oldest.id]) {
-                        usedPurchases[oldest.id] = { usedQty: 0, usedInDate: dateStr };
+                        usedPurchases[oldest.id] = { totalUsed: 0, byDate: {} };
                     }
-                    usedPurchases[oldest.id].usedQty += takeQty;
+                    if (!usedPurchases[oldest.id].byDate[dateStr]) {
+                        usedPurchases[oldest.id].byDate[dateStr] = 0;
+                    }
+                    usedPurchases[oldest.id].totalUsed += takeQty;
+                    usedPurchases[oldest.id].byDate[dateStr] += takeQty;
                     
                     if (oldest.qty <= 0) {
                         carryover[type].shift();
@@ -894,7 +911,7 @@ function calculateAllDaysProfitWithCarryover() {
     });
     
     // Сохраняем состояние для отображения в деталях дня
-    calendarCarryoverState = { usedPurchases, carryover };
+    calendarCarryoverState = { usedPurchases, carryover, carryoverByDate };
     calendarProfitCache = result;
     calendarProfitCacheKey = cacheKey;
     return result;
@@ -922,14 +939,52 @@ function showDayDetails(dateStr) {
     const daySales = data.sales.filter(s => s.date === dateStr);
     const dayPurchases = data.purchases.filter(p => p.date === dateStr);
     
-    if (daySales.length === 0 && dayPurchases.length === 0) {
+    // Убедимся что кэш рассчитан
+    calculateAllDaysProfitWithCarryover();
+    const state = calendarCarryoverState || { usedPurchases: {}, carryover: {}, carryoverByDate: {} };
+    
+    // Проверяем есть ли перенесённые покупки
+    const carryoverForDay = state.carryoverByDate[dateStr] || {};
+    let hasCarryoverItems = false;
+    data.itemTypes.forEach(type => {
+        const items = carryoverForDay[type] || [];
+        if (items.some(item => item.qty > 0)) hasCarryoverItems = true;
+    });
+    
+    if (daySales.length === 0 && dayPurchases.length === 0 && !hasCarryoverItems) {
         container.innerHTML = '<p style="color: var(--text-secondary);">Нет транзакций за этот день</p>';
         return;
     }
     
-    // Убедимся что кэш рассчитан
-    calculateAllDaysProfitWithCarryover();
-    const state = calendarCarryoverState || { usedPurchases: {}, carryover: {} };
+    // Показываем перенесённые покупки с предыдущих дней
+    let hasCarryover = false;
+    data.itemTypes.forEach(type => {
+        const items = carryoverForDay[type] || [];
+        items.forEach(item => {
+            if (item.qty > 0) {
+                hasCarryover = true;
+                const div = document.createElement('div');
+                div.className = 'transaction-item expense carryover-in';
+                const originalPurchase = data.purchases.find(p => p.id === item.id);
+                const itemName = originalPurchase ? originalPurchase.itemType : type;
+                div.innerHTML = `
+                    <span>${itemName} <span class="tx-status tx-carryover-in">← перенос с ${formatDate(item.date)}</span></span>
+                    <span>${item.qty} шт.</span>
+                    <span>-${formatMoney(item.qty * item.costPerUnit)}</span>
+                    <span></span>
+                    <span></span>
+                `;
+                container.appendChild(div);
+            }
+        });
+    });
+    
+    if (hasCarryover) {
+        const separator = document.createElement('div');
+        separator.className = 'day-separator';
+        separator.innerHTML = '<span>Транзакции этого дня:</span>';
+        container.appendChild(separator);
+    }
     
     // Объединяем и сортируем по времени (от старых к новым)
     const allTransactions = [
@@ -947,14 +1002,16 @@ function showDayDetails(dateStr) {
         let statusLabel = '';
         
         if (tx.transType === 'expense') {
-            // Проверяем использована ли эта покупка
+            // Проверяем использована ли эта покупка В ЭТОТ ДЕНЬ
             const usedInfo = state.usedPurchases[tx.id];
-            if (usedInfo && usedInfo.usedQty >= tx.quantity) {
+            const usedInThisDay = usedInfo?.byDate?.[dateStr] || 0;
+            
+            if (usedInThisDay >= tx.quantity) {
                 statusClass = 'used';
                 statusLabel = '<span class="tx-status tx-used">✓ использовано</span>';
-            } else if (usedInfo && usedInfo.usedQty > 0) {
+            } else if (usedInThisDay > 0) {
                 statusClass = 'partial';
-                statusLabel = `<span class="tx-status tx-partial">частично (${usedInfo.usedQty}/${tx.quantity})</span>`;
+                statusLabel = `<span class="tx-status tx-partial">частично (${usedInThisDay}/${tx.quantity})</span>`;
             } else {
                 statusClass = 'carryover';
                 statusLabel = '<span class="tx-status tx-carryover">→ перенос</span>';
