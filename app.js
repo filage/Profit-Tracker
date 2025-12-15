@@ -71,7 +71,10 @@ function initTabs() {
     });
     
     // Фильтр по типу
-    document.getElementById('itemTypeFilter').addEventListener('change', updateStats);
+    document.getElementById('itemTypeFilter').addEventListener('change', () => {
+        updateStats();
+        updateChart();
+    });
     
     // Фильтр по датам
     document.getElementById('dateFrom').addEventListener('change', () => {
@@ -509,6 +512,138 @@ function getStatsDateRange() {
     };
 }
 
+function getSelectedTypes() {
+    const filterType = document.getElementById('itemTypeFilter').value;
+    return filterType === 'all' ? [...data.itemTypes] : [filterType];
+}
+
+function calculatePeriodTotalsWithCarryover(types, dateFrom, dateTo) {
+    const carryover = {};
+    types.forEach(type => {
+        carryover[type] = [];
+    });
+
+    const purchases = data.purchases
+        .filter(p => types.includes(p.itemType) && p.date <= dateTo)
+        .sort(sortByDateTime);
+    const sales = data.sales
+        .filter(s => types.includes(s.itemType) && s.date <= dateTo)
+        .sort(sortByDateTime);
+
+    const allDates = [...new Set([
+        ...purchases.map(p => p.date),
+        ...sales.map(s => s.date)
+    ])].sort();
+
+    let totalIncome = 0;
+    let totalExpense = 0;
+    let matchedQtyInRange = 0;
+
+    allDates.forEach(dateStr => {
+        types.forEach(type => {
+            const dayPurchases = purchases.filter(p => p.date === dateStr && p.itemType === type);
+            dayPurchases.forEach(p => {
+                const costPerUnit = getAmountInRub(p) / p.quantity;
+                carryover[type].push({
+                    qty: p.quantity,
+                    costPerUnit,
+                    date: p.date,
+                    time: p.time || '00:00'
+                });
+            });
+
+            const daySales = sales.filter(s => s.date === dateStr && s.itemType === type);
+            daySales.forEach(s => {
+                let remainingToSell = s.quantity;
+                const saleUnitPrice = getAmountInRub(s) / s.quantity;
+                while (remainingToSell > 0 && carryover[type].length > 0) {
+                    const oldest = carryover[type][0];
+                    const takeQty = Math.min(oldest.qty, remainingToSell);
+                    const isInRange = dateStr >= dateFrom && dateStr <= dateTo;
+
+                    if (isInRange) {
+                        matchedQtyInRange += takeQty;
+                        totalIncome += takeQty * saleUnitPrice;
+                        totalExpense += takeQty * oldest.costPerUnit;
+                    }
+
+                    oldest.qty -= takeQty;
+                    remainingToSell -= takeQty;
+                    if (oldest.qty <= 0) {
+                        carryover[type].shift();
+                    }
+                }
+            });
+        });
+    });
+
+    return { totalIncome, totalExpense, matchedQtyInRange };
+}
+
+function calculateAllDaysProfitWithCarryoverForTypes(types, maxDateStr) {
+    const carryover = {};
+    types.forEach(type => {
+        carryover[type] = [];
+    });
+
+    const purchases = data.purchases
+        .filter(p => types.includes(p.itemType) && (!maxDateStr || p.date <= maxDateStr))
+        .sort(sortByDateTime);
+    const sales = data.sales
+        .filter(s => types.includes(s.itemType) && (!maxDateStr || s.date <= maxDateStr))
+        .sort(sortByDateTime);
+
+    const allDates = [...new Set([
+        ...purchases.map(p => p.date),
+        ...sales.map(s => s.date)
+    ])].sort();
+
+    const result = {};
+
+    allDates.forEach(dateStr => {
+        let dayIncome = 0;
+        let dayExpense = 0;
+
+        types.forEach(type => {
+            const dayPurchases = purchases.filter(p => p.date === dateStr && p.itemType === type);
+            dayPurchases.forEach(p => {
+                const costPerUnit = getAmountInRub(p) / p.quantity;
+                carryover[type].push({
+                    qty: p.quantity,
+                    costPerUnit,
+                    date: p.date,
+                    time: p.time || '00:00'
+                });
+            });
+
+            const daySales = sales.filter(s => s.date === dateStr && s.itemType === type);
+            daySales.forEach(s => {
+                let remainingToSell = s.quantity;
+                const saleUnitPrice = getAmountInRub(s) / s.quantity;
+                while (remainingToSell > 0 && carryover[type].length > 0) {
+                    const oldest = carryover[type][0];
+                    const takeQty = Math.min(oldest.qty, remainingToSell);
+
+                    dayIncome += takeQty * saleUnitPrice;
+                    dayExpense += takeQty * oldest.costPerUnit;
+
+                    oldest.qty -= takeQty;
+                    remainingToSell -= takeQty;
+                    if (oldest.qty <= 0) {
+                        carryover[type].shift();
+                    }
+                }
+            });
+        });
+
+        if (dayIncome !== 0 || dayExpense !== 0) {
+            result[dateStr] = { hasData: true, profit: dayIncome - dayExpense };
+        }
+    });
+
+    return result;
+}
+
 // Обновление статистики с динамическим пересчётом курса
 function updateStats() {
     const filterType = document.getElementById('itemTypeFilter').value;
@@ -542,52 +677,12 @@ function updateStats() {
     let totalIncome = 0;
     
     if (equalize) {
-        // Считаем по каждому типу отдельно
-        const types = filterType === 'all' ? data.itemTypes : [filterType];
-        
-        types.forEach(type => {
-            const typePurchases = purchases.filter(p => p.itemType === type);
-            const typeSales = sales.filter(s => s.itemType === type);
-            
-            const boughtQty = typePurchases.reduce((sum, p) => sum + p.quantity, 0);
-            const soldQty = typeSales.reduce((sum, s) => sum + s.quantity, 0);
-            const matchedQty = Math.min(boughtQty, soldQty);
-            
-            if (matchedQty > 0) {
-                // Берём первые matchedQty покупок (FIFO по дате)
-                const sortedPurchases = [...typePurchases].sort((a, b) => a.date.localeCompare(b.date));
-                let remainingQty = matchedQty;
-                for (const p of sortedPurchases) {
-                    if (remainingQty <= 0) break;
-                    const pricePerUnit = getAmountInRub(p) / p.quantity;
-                    const takeQty = Math.min(p.quantity, remainingQty);
-                    totalExpense += takeQty * pricePerUnit;
-                    remainingQty -= takeQty;
-                }
-                
-                // Берём первые matchedQty продаж (FIFO по дате)
-                const sortedSales = [...typeSales].sort((a, b) => a.date.localeCompare(b.date));
-                remainingQty = matchedQty;
-                for (const s of sortedSales) {
-                    if (remainingQty <= 0) break;
-                    const pricePerUnit = getAmountInRub(s) / s.quantity;
-                    const takeQty = Math.min(s.quantity, remainingQty);
-                    totalIncome += takeQty * pricePerUnit;
-                    remainingQty -= takeQty;
-                }
-            }
-        });
-        
-        // Пересчитываем отображаемое количество
-        displayBought = 0;
-        displaySold = 0;
-        types.forEach(type => {
-            const boughtQty = purchases.filter(p => p.itemType === type).reduce((sum, p) => sum + p.quantity, 0);
-            const soldQty = sales.filter(s => s.itemType === type).reduce((sum, s) => sum + s.quantity, 0);
-            const matched = Math.min(boughtQty, soldQty);
-            displayBought += matched;
-            displaySold += matched;
-        });
+        const types = filterType === 'all' ? [...data.itemTypes] : [filterType];
+        const totals = calculatePeriodTotalsWithCarryover(types, dateFrom, dateTo);
+        totalIncome = totals.totalIncome;
+        totalExpense = totals.totalExpense;
+        displayBought = totals.matchedQtyInRange;
+        displaySold = totals.matchedQtyInRange;
     } else {
         totalExpense = purchases.reduce((sum, p) => sum + getAmountInRub(p), 0);
         totalIncome = totalSaleAmount;
@@ -617,60 +712,32 @@ function renderItemStats(equalize) {
     const { from: dateFrom, to: dateTo } = getStatsDateRange();
     
     data.itemTypes.forEach(type => {
-        let purchases = data.purchases.filter(p => p.itemType === type);
-        let sales = data.sales.filter(s => s.itemType === type);
+        let bought = 0;
+        let sold = 0;
+        let boughtAmount = 0;
+        let soldAmount = 0;
         
-        // Фильтрация по датам (всегда применяется)
-        purchases = purchases.filter(p => p.date >= dateFrom && p.date <= dateTo);
-        sales = sales.filter(s => s.date >= dateFrom && s.date <= dateTo);
-        
-        let bought = purchases.reduce((sum, p) => sum + p.quantity, 0);
-        let sold = sales.reduce((sum, s) => sum + s.quantity, 0);
-        
-        // Динамический пересчёт по курсу
-        let boughtAmount = purchases.reduce((sum, p) => sum + getAmountInRub(p), 0);
-        let soldAmount = sales.reduce((sum, s) => sum + getAmountInRub(s), 0);
+        if (equalize) {
+            const totals = calculatePeriodTotalsWithCarryover([type], dateFrom, dateTo);
+            bought = totals.matchedQtyInRange;
+            sold = totals.matchedQtyInRange;
+            boughtAmount = totals.totalExpense;
+            soldAmount = totals.totalIncome;
+        } else {
+            let purchases = data.purchases.filter(p => p.itemType === type);
+            let sales = data.sales.filter(s => s.itemType === type);
+            
+            purchases = purchases.filter(p => p.date >= dateFrom && p.date <= dateTo);
+            sales = sales.filter(s => s.date >= dateFrom && s.date <= dateTo);
+            
+            bought = purchases.reduce((sum, p) => sum + p.quantity, 0);
+            sold = sales.reduce((sum, s) => sum + s.quantity, 0);
+            
+            boughtAmount = purchases.reduce((sum, p) => sum + getAmountInRub(p), 0);
+            soldAmount = sales.reduce((sum, s) => sum + getAmountInRub(s), 0);
+        }
         
         if (bought === 0 && sold === 0) return;
-        
-        // Приравнивание: min(покупки, продажи)
-        if (equalize) {
-            const matchedQty = Math.min(bought, sold);
-            
-            if (matchedQty > 0) {
-                // Покупки FIFO
-                const sortedPurchases = [...purchases].sort((a, b) => a.date.localeCompare(b.date));
-                let remainingQty = matchedQty;
-                boughtAmount = 0;
-                for (const p of sortedPurchases) {
-                    if (remainingQty <= 0) break;
-                    const pricePerUnit = getAmountInRub(p) / p.quantity;
-                    const takeQty = Math.min(p.quantity, remainingQty);
-                    boughtAmount += takeQty * pricePerUnit;
-                    remainingQty -= takeQty;
-                }
-                
-                // Продажи FIFO
-                const sortedSales = [...sales].sort((a, b) => a.date.localeCompare(b.date));
-                remainingQty = matchedQty;
-                soldAmount = 0;
-                for (const s of sortedSales) {
-                    if (remainingQty <= 0) break;
-                    const pricePerUnit = getAmountInRub(s) / s.quantity;
-                    const takeQty = Math.min(s.quantity, remainingQty);
-                    soldAmount += takeQty * pricePerUnit;
-                    remainingQty -= takeQty;
-                }
-                
-                bought = matchedQty;
-                sold = matchedQty;
-            } else {
-                boughtAmount = 0;
-                soldAmount = 0;
-                bought = 0;
-                sold = 0;
-            }
-        }
         
         const profit = soldAmount - boughtAmount;
         
@@ -1175,17 +1242,33 @@ function initChart() {
         type: 'line',
         data: {
             labels: [],
-            datasets: [{
-                label: 'Прибыль (₽)',
-                data: [],
-                borderColor: '#00d26a',
-                backgroundColor: 'rgba(0, 210, 106, 0.1)',
-                borderWidth: 2,
-                fill: true,
-                tension: 0.4,
-                pointRadius: 4,
-                pointBackgroundColor: '#00d26a'
-            }]
+            datasets: [
+                {
+                    label: 'Прибыль (₽)',
+                    data: [],
+                    borderColor: '#00d26a',
+                    backgroundColor: 'rgba(0, 210, 106, 0.1)',
+                    borderWidth: 2,
+                    fill: true,
+                    tension: 0.4,
+                    pointRadius: 4,
+                    pointBackgroundColor: '#00d26a',
+                    yAxisID: 'y'
+                },
+                {
+                    label: 'Продано (шт.)',
+                    data: [],
+                    borderColor: '#4aa3ff',
+                    backgroundColor: 'rgba(74, 163, 255, 0.0)',
+                    borderWidth: 2,
+                    fill: false,
+                    tension: 0.35,
+                    pointRadius: 4,
+                    pointBackgroundColor: '#4aa3ff',
+                    borderDash: [6, 4],
+                    yAxisID: 'yQty'
+                }
+            ]
         },
         options: {
             responsive: true,
@@ -1203,6 +1286,14 @@ function initChart() {
                     ticks: { 
                         color: '#8b8b9e',
                         callback: value => value.toFixed(0) + '₽'
+                    }
+                },
+                yQty: {
+                    position: 'right',
+                    grid: { drawOnChartArea: false },
+                    ticks: {
+                        color: '#8b8b9e',
+                        callback: value => value.toFixed(0) + ' шт.'
                     }
                 }
             }
@@ -1225,9 +1316,13 @@ function updateChart() {
     
     const dateFrom = document.getElementById('dateFrom').value;
     const dateTo = document.getElementById('dateTo').value;
+    const equalize = document.getElementById('equalizeToggle').checked;
+    const types = getSelectedTypes();
     
     const labels = [];
     const profits = [];
+    const soldQty = [];
+    const dateStrs = [];
     
     // Если заданы даты фильтра — используем их диапазон
     if (dateFrom && dateTo) {
@@ -1242,10 +1337,9 @@ function updateChart() {
                 String(d.getMonth() + 1).padStart(2, '0'),
                 String(d.getDate()).padStart(2, '0')
             ].join('-');
-            
-            const dayData = calculateDayProfit(dateStr);
+
             labels.push(d.toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' }));
-            profits.push(dayData.profit);
+            dateStrs.push(dateStr);
         }
     } else {
         // Иначе используем период (7/30/365 дней)
@@ -1260,16 +1354,40 @@ function updateChart() {
                 String(date.getMonth() + 1).padStart(2, '0'),
                 String(date.getDate()).padStart(2, '0')
             ].join('-');
-
-            const dayData = calculateDayProfit(dateStr);
             
             labels.push(date.toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' }));
-            profits.push(dayData.profit);
+            dateStrs.push(dateStr);
         }
     }
+
+    const maxDateStr = dateStrs.length > 0 ? dateStrs[dateStrs.length - 1] : null;
+    const profitByDate = equalize ? calculateAllDaysProfitWithCarryoverForTypes(types, maxDateStr) : null;
+
+    dateStrs.forEach(dateStr => {
+        let profit = 0;
+        if (equalize) {
+            profit = (profitByDate && profitByDate[dateStr]) ? profitByDate[dateStr].profit : 0;
+        } else {
+            const daySales = data.sales.filter(s => types.includes(s.itemType) && s.date === dateStr);
+            const dayPurchases = data.purchases.filter(p => types.includes(p.itemType) && p.date === dateStr);
+            const dayIncome = daySales.reduce((sum, s) => sum + getAmountInRub(s), 0);
+            const dayExpense = dayPurchases.reduce((sum, p) => sum + getAmountInRub(p), 0);
+            profit = dayIncome - dayExpense;
+        }
+
+        const qty = data.sales
+            .filter(s => types.includes(s.itemType) && s.date === dateStr)
+            .reduce((sum, s) => sum + s.quantity, 0);
+
+        profits.push(profit);
+        soldQty.push(qty);
+    });
     
     profitChart.data.labels = labels;
     profitChart.data.datasets[0].data = profits;
+    if (profitChart.data.datasets[1]) {
+        profitChart.data.datasets[1].data = soldQty;
+    }
     
     // Цвет линии в зависимости от общего результата
     const total = profits.reduce((a, b) => a + b, 0);
@@ -1286,7 +1404,9 @@ function updateChart() {
 
 function updatePointsVisibility() {
     if (!profitChart) return;
-    profitChart.data.datasets[0].pointRadius = showPoints ? 4 : 0;
+    profitChart.data.datasets.forEach(ds => {
+        ds.pointRadius = showPoints ? 4 : 0;
+    });
     profitChart.update();
 }
 
