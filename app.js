@@ -98,6 +98,8 @@ function initTabs() {
             document.querySelectorAll('.period-btn').forEach(b => b.classList.remove('active'));
             btn.classList.add('active');
             chartPeriod = parseInt(btn.dataset.period);
+            document.getElementById('dateFrom').value = '';
+            document.getElementById('dateTo').value = '';
             updateStats();
             updateChart();
         });
