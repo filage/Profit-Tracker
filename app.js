@@ -483,6 +483,10 @@ function getAmountInRub(transaction) {
     return transaction.originalAmount * rate;
 }
 
+function getSaleAmountInRub(sale) {
+    return getAmountInRub(sale) * 0.97;
+}
+
 // Форматировать дату в YYYY-MM-DD (локальное время)
 function formatDateLocal(date) {
     const year = date.getFullYear();
@@ -557,7 +561,7 @@ function calculatePeriodTotalsWithCarryover(types, dateFrom, dateTo) {
             const daySales = sales.filter(s => s.date === dateStr && s.itemType === type);
             daySales.forEach(s => {
                 let remainingToSell = s.quantity;
-                const saleUnitPrice = getAmountInRub(s) / s.quantity;
+                const saleUnitPrice = getSaleAmountInRub(s) / s.quantity;
                 while (remainingToSell > 0 && carryover[type].length > 0) {
                     const oldest = carryover[type][0];
                     const takeQty = Math.min(oldest.qty, remainingToSell);
@@ -621,7 +625,7 @@ function calculateAllDaysProfitWithCarryoverForTypes(types, maxDateStr) {
             const daySales = sales.filter(s => s.date === dateStr && s.itemType === type);
             daySales.forEach(s => {
                 let remainingToSell = s.quantity;
-                const saleUnitPrice = getAmountInRub(s) / s.quantity;
+                const saleUnitPrice = getSaleAmountInRub(s) / s.quantity;
                 while (remainingToSell > 0 && carryover[type].length > 0) {
                     const oldest = carryover[type][0];
                     const takeQty = Math.min(oldest.qty, remainingToSell);
@@ -670,7 +674,7 @@ function updateStats() {
     let totalSold = sales.reduce((sum, s) => sum + s.quantity, 0);
     
     // Суммы с динамическим пересчётом по курсу
-    let totalSaleAmount = sales.reduce((sum, s) => sum + getAmountInRub(s), 0);
+    let totalSaleAmount = sales.reduce((sum, s) => sum + getSaleAmountInRub(s), 0);
     
     // Приравнивание: по каждому типу min(покупки, продажи)
     let displayBought = totalBought;
@@ -736,7 +740,7 @@ function renderItemStats(equalize) {
             sold = sales.reduce((sum, s) => sum + s.quantity, 0);
             
             boughtAmount = purchases.reduce((sum, p) => sum + getAmountInRub(p), 0);
-            soldAmount = sales.reduce((sum, s) => sum + getAmountInRub(s), 0);
+            soldAmount = sales.reduce((sum, s) => sum + getSaleAmountInRub(s), 0);
         }
         
         if (bought === 0 && sold === 0) return;
@@ -943,7 +947,7 @@ function calculateAllDaysProfitWithCarryover() {
                 .sort(sortByDateTime);
             
             const soldQty = daySales.reduce((sum, s) => sum + s.quantity, 0);
-            const soldAmount = daySales.reduce((sum, s) => sum + getAmountInRub(s), 0);
+            const soldAmount = daySales.reduce((sum, s) => sum + getSaleAmountInRub(s), 0);
             
             if (soldQty > 0) {
                 dayIncome += soldAmount;
@@ -1083,19 +1087,19 @@ function showDayDetails(dateStr) {
                 statusLabel = `<span class="tx-status tx-partial">частично (${usedInThisDay}/${tx.quantity})</span>`;
             } else {
                 statusClass = 'carryover';
-                statusLabel = '<span class="tx-status tx-carryover">→ перенос</span>';
             }
         }
         
         div.className = `transaction-item ${tx.transType === 'income' ? 'sale' : 'expense'} ${statusClass}`;
-        const pricePerUnit = tx.originalAmount / tx.quantity;
+        
         const timeStr = tx.time ? `<span class="tx-time">${tx.time}</span>` : '';
-        const sign = tx.transType === 'income' ? '' : '-';
+        const sign = tx.transType === 'income' ? '+' : '-';
+        const pricePerUnit = tx.originalAmount / tx.quantity;
         
         div.innerHTML = `
             <span>${tx.itemType} ${timeStr} ${statusLabel}</span>
             <span>${tx.quantity} шт.</span>
-            <span>${sign}${formatMoney(getAmountInRub(tx))}</span>
+            <span>${sign}${formatMoney(tx.transType === 'income' ? getSaleAmountInRub(tx) : getAmountInRub(tx))}</span>
             <button class="day-edit" data-id="${tx.id}" data-type="${tx.transType === 'income' ? 'income' : 'expense'}" data-price="${pricePerUnit}">Изменить</button>
             <button class="day-delete" data-id="${tx.id}" data-type="${tx.transType === 'income' ? 'income' : 'expense'}">Удалить</button>
         `;
@@ -1372,7 +1376,7 @@ function updateChart() {
         } else {
             const daySales = data.sales.filter(s => types.includes(s.itemType) && s.date === dateStr);
             const dayPurchases = data.purchases.filter(p => types.includes(p.itemType) && p.date === dateStr);
-            const dayIncome = daySales.reduce((sum, s) => sum + getAmountInRub(s), 0);
+            const dayIncome = daySales.reduce((sum, s) => sum + getSaleAmountInRub(s), 0);
             const dayExpense = dayPurchases.reduce((sum, p) => sum + getAmountInRub(p), 0);
             profit = dayIncome - dayExpense;
         }
@@ -1460,7 +1464,7 @@ function showDetails(type, filterItemType = null) {
     
     // Подсчёт итогов
     const totalIncome = transactions.filter(t => t.transType === 'income')
-        .reduce((sum, t) => sum + getAmountInRub(t), 0);
+        .reduce((sum, t) => sum + getSaleAmountInRub(t), 0);
     const totalExpense = transactions.filter(t => t.transType === 'expense')
         .reduce((sum, t) => sum + getAmountInRub(t), 0);
     const totalQty = transactions.reduce((sum, t) => sum + t.quantity, 0);
@@ -1522,7 +1526,7 @@ function showDetails(type, filterItemType = null) {
                 currencySymbol = '¥';
             } else {
                 // Показываем в рублях
-                displayAmount = getAmountInRub(t);
+                displayAmount = t.transType === 'income' ? getSaleAmountInRub(t) : getAmountInRub(t);
                 currencySymbol = '₽';
             }
             
