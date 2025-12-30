@@ -3,13 +3,99 @@ let data = {
     itemTypes: ['Тип 1', 'Тип 2', 'Тип 3', 'Тип 4', 'Тип 5', 'Тип 6', 'Тип 7', 'Тип 8', 'Тип 9'],
     purchases: [],
     sales: [],
-    rates: []
+    rates: [],
+    itemImages: {}
 };
+
+function getNowTimeHHMM() {
+    const d = new Date();
+    const hh = String(d.getHours()).padStart(2, '0');
+    const mm = String(d.getMinutes()).padStart(2, '0');
+    return `${hh}:${mm}`;
+}
+
+function initItemImagePicker() {
+    const input = document.getElementById('itemImageFile');
+    if (!input) return;
+
+    input.addEventListener('change', async (e) => {
+        const file = e.target.files && e.target.files[0];
+        e.target.value = '';
+        if (!file) return;
+
+        const type = pendingItemImageType;
+        pendingItemImageType = null;
+        if (!type) return;
+
+        if (!file.type || !file.type.startsWith('image/')) {
+            alert('Выберите файл изображения');
+            return;
+        }
+
+        if (file.size > 5 * 1024 * 1024) {
+            alert('Файл слишком большой. Выбери картинку поменьше.');
+            return;
+        }
+
+        try {
+            const dataUrl = await readAndResizeImageToDataUrl(file, 256);
+            if (!data.itemImages || typeof data.itemImages !== 'object') data.itemImages = {};
+            data.itemImages[type] = dataUrl;
+            saveData();
+            renderInventory();
+        } catch (err) {
+            alert('Не удалось обработать изображение: ' + (err && err.message ? err.message : err));
+        }
+    });
+}
+
+function readAndResizeImageToDataUrl(file, maxSide) {
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onerror = () => reject(new Error('Ошибка чтения файла'));
+        reader.onload = () => {
+            const img = new Image();
+            img.onload = () => {
+                const w = img.naturalWidth || img.width;
+                const h = img.naturalHeight || img.height;
+
+                if (!w || !h) {
+                    reject(new Error('Неверное изображение'));
+                    return;
+                }
+
+                const scale = Math.min(1, maxSide / Math.max(w, h));
+                const outW = Math.max(1, Math.round(w * scale));
+                const outH = Math.max(1, Math.round(h * scale));
+
+                const canvas = document.createElement('canvas');
+                canvas.width = outW;
+                canvas.height = outH;
+                const ctx = canvas.getContext('2d');
+                ctx.drawImage(img, 0, 0, outW, outH);
+
+                let out;
+                try {
+                    out = canvas.toDataURL('image/webp', 0.85);
+                } catch (_) {
+                    out = canvas.toDataURL('image/jpeg', 0.85);
+                }
+
+                resolve(out);
+            };
+            img.onerror = () => reject(new Error('Ошибка загрузки изображения'));
+            img.src = reader.result;
+        };
+        reader.readAsDataURL(file);
+    });
+}
 
 // Переменные для графика
 let profitChart = null;
 let chartPeriod = 30;
 let showPoints = true;
+
+let pendingItemImageType = null;
 
 // Загрузка данных из localStorage
 function loadData() {
@@ -17,6 +103,22 @@ function loadData() {
     if (saved) {
         data = JSON.parse(saved);
     }
+
+    if (!data || typeof data !== 'object') {
+        data = {
+            itemTypes: [],
+            purchases: [],
+            sales: [],
+            rates: [],
+            itemImages: {}
+        };
+    }
+
+    if (!Array.isArray(data.itemTypes)) data.itemTypes = [];
+    if (!Array.isArray(data.purchases)) data.purchases = [];
+    if (!Array.isArray(data.sales)) data.sales = [];
+    if (!Array.isArray(data.rates)) data.rates = [];
+    if (!data.itemImages || typeof data.itemImages !== 'object') data.itemImages = {};
 }
 
 // Сохранение данных в localStorage
@@ -36,6 +138,7 @@ document.addEventListener('DOMContentLoaded', () => {
     initTabs();
     initModals();
     initForms();
+    initItemImagePicker();
     initCalendar();
     initRates();
     initChart();
@@ -44,6 +147,7 @@ document.addEventListener('DOMContentLoaded', () => {
     
     updateStats();
     renderItemTypesList();
+    renderInventory();
 });
 
 // Инициализация вкладок
@@ -59,6 +163,10 @@ function initTabs() {
             
             if (tab.dataset.tab === 'calendar') {
                 renderCalendar();
+            }
+
+            if (tab.dataset.tab === 'inventory') {
+                renderInventory();
             }
         });
     });
@@ -161,7 +269,8 @@ function importData(e) {
                     itemTypes: imported.itemTypes,
                     purchases: imported.purchases,
                     sales: imported.sales,
-                    rates: imported.rates || []
+                    rates: imported.rates || [],
+                    itemImages: imported.itemImages || {}
                 };
                 
                 saveData();
@@ -171,6 +280,7 @@ function importData(e) {
                 renderCalendar();
                 renderRatesList();
                 renderItemTypesList();
+                renderInventory();
                 
                 alert('Данные успешно импортированы!');
             }
@@ -187,11 +297,13 @@ function initModals() {
     // Кнопки открытия
     document.getElementById('addPurchaseBtn').addEventListener('click', () => {
         document.getElementById('purchaseDate').valueAsDate = new Date();
+        document.getElementById('purchaseTime').value = getNowTimeHHMM();
         document.getElementById('purchaseModal').classList.remove('hidden');
     });
     
     document.getElementById('addSaleBtn').addEventListener('click', () => {
         document.getElementById('saleDate').valueAsDate = new Date();
+        document.getElementById('saleTime').value = getNowTimeHHMM();
         document.getElementById('saleModal').classList.remove('hidden');
     });
     
@@ -220,6 +332,7 @@ function initModals() {
             saveData();
             updateItemTypeSelects();
             renderItemTypesList();
+            renderInventory();
             input.value = '';
         }
     });
@@ -255,6 +368,7 @@ function initForms() {
         updateStats();
         updateChart();
         renderCalendar();
+        renderInventory();
         document.getElementById('purchaseModal').classList.add('hidden');
         document.getElementById('purchaseForm').reset();
     });
@@ -287,6 +401,7 @@ function initForms() {
         updateStats();
         updateChart();
         renderCalendar();
+        renderInventory();
         document.getElementById('saleModal').classList.add('hidden');
         document.getElementById('saleForm').reset();
     });
@@ -307,11 +422,17 @@ function initForms() {
             data.sales.forEach(s => {
                 if (s.itemType === oldName) s.itemType = newName;
             });
+
+            if (data.itemImages && Object.prototype.hasOwnProperty.call(data.itemImages, oldName)) {
+                data.itemImages[newName] = data.itemImages[oldName];
+                delete data.itemImages[oldName];
+            }
             
             saveData();
             updateItemTypeSelects();
             renderItemTypesList();
             updateStats();
+            renderInventory();
             document.getElementById('editItemModal').classList.add('hidden');
         }
     });
@@ -363,6 +484,7 @@ function initForms() {
         updateStats();
         updateChart();
         renderCalendar();
+        renderInventory();
         
         document.getElementById('editTxModal').classList.add('hidden');
         
@@ -434,12 +556,126 @@ function renderItemTypesList() {
     container.querySelectorAll('.delete-item').forEach(btn => {
         btn.addEventListener('click', () => {
             const index = parseInt(btn.dataset.index);
+            const oldName = data.itemTypes[index];
             data.itemTypes.splice(index, 1);
+
+            if (data.itemImages && Object.prototype.hasOwnProperty.call(data.itemImages, oldName)) {
+                delete data.itemImages[oldName];
+            }
             saveData();
             updateItemTypeSelects();
             renderItemTypesList();
             updateStats();
+            renderInventory();
         });
+    });
+}
+
+function normalizeQty(v) {
+    const n = parseInt(v, 10);
+    return Number.isFinite(n) && n > 0 ? n : 1;
+}
+
+function getInventoryRows() {
+    const types = Array.isArray(data.itemTypes) ? data.itemTypes : [];
+
+    const boughtByType = {};
+    const soldByType = {};
+
+    (data.purchases || []).forEach(p => {
+        if (!p || !p.itemType) return;
+        const t = p.itemType;
+        boughtByType[t] = (boughtByType[t] || 0) + normalizeQty(p.quantity);
+    });
+
+    (data.sales || []).forEach(s => {
+        if (!s || !s.itemType) return;
+        const t = s.itemType;
+        soldByType[t] = (soldByType[t] || 0) + normalizeQty(s.quantity);
+    });
+
+    const seen = new Set([...Object.keys(boughtByType), ...Object.keys(soldByType), ...types]);
+    const rows = [];
+    seen.forEach(type => {
+        const bought = boughtByType[type] || 0;
+        const sold = soldByType[type] || 0;
+        const left = bought - sold;
+        if (bought === 0 && sold === 0) return;
+        rows.push({ type, bought, sold, left });
+    });
+
+    rows.sort((a, b) => {
+        if (b.left !== a.left) return b.left - a.left;
+        return a.type.localeCompare(b.type);
+    });
+
+    return rows;
+}
+
+function renderInventory() {
+    const grid = document.getElementById('inventoryGrid');
+    if (!grid) return;
+
+    const rows = getInventoryRows();
+    grid.innerHTML = '';
+
+    if (rows.length === 0) {
+        const empty = document.createElement('div');
+        empty.className = 'inventory-empty';
+        empty.textContent = 'Пока нет данных по покупкам/продажам.';
+        grid.appendChild(empty);
+        return;
+    }
+
+    rows.forEach(r => {
+        const card = document.createElement('div');
+        card.className = 'inventory-card' + (r.left <= 0 ? ' inventory-card-empty' : '');
+        card.dataset.itemType = r.type;
+
+        const imgUrl = (data.itemImages && data.itemImages[r.type]) ? String(data.itemImages[r.type]) : '';
+        const imgHtml = imgUrl
+            ? `<img class="inventory-img" src="${imgUrl}" alt="${r.type}">`
+            : `<div class="inventory-img inventory-img-placeholder">${String(r.type).trim().slice(0, 2).toUpperCase()}</div>`;
+
+        card.innerHTML = `
+            <div class="inventory-img-wrap">${imgHtml}</div>
+            <div class="inventory-info">
+                <div class="inventory-name">${r.type}</div>
+                <div class="inventory-counts">
+                    <div class="inventory-count bought">Куплено: ${r.bought}</div>
+                    <div class="inventory-count sold">Продано: ${r.sold}</div>
+                </div>
+                <div class="inventory-left">Осталось: <span class="inventory-left-value">${r.left}</span></div>
+            </div>
+            <button class="inventory-img-btn" type="button" title="Картинка">🖼️</button>
+        `;
+
+        card.addEventListener('click', () => {
+            showDetails('all', r.type);
+        });
+
+        const btn = card.querySelector('.inventory-img-btn');
+        btn.addEventListener('click', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+
+            const hasImage = !!(data.itemImages && data.itemImages[r.type]);
+            if (hasImage) {
+                const shouldDelete = confirm('Удалить картинку?\n\nОК — удалить\nОтмена — заменить на новую');
+                if (shouldDelete) {
+                    delete data.itemImages[r.type];
+                    saveData();
+                    renderInventory();
+                    return;
+                }
+            }
+
+            pendingItemImageType = r.type;
+            const input = document.getElementById('itemImageFile');
+            if (input) input.click();
+        });
+
+        grid.appendChild(card);
     });
 }
 

@@ -19,6 +19,9 @@
             <button class="nav-tab active" data-tab="graph">
                 <span class="tab-icon">📊</span> График
             </button>
+            <button class="nav-tab" data-tab="inventory">
+                <span class="tab-icon">🎒</span> Инвентарь
+            </button>
             <button class="nav-tab" data-tab="calendar">
                 <span class="tab-icon">📅</span> Календарь
             </button>
@@ -69,6 +72,7 @@
                         <button id="exportBtn" class="btn-icon btn-export" title="Экспорт">📤</button>
                         <button id="importBtn" class="btn-icon btn-import" title="Импорт">📥</button>
                         <input type="file" id="importFile" accept=".json" style="display:none">
+                        <input type="file" id="itemImageFile" accept="image/*" style="display:none">
                     </div>
                     <div class="equalize-toggle">
                         <span>Приравнять покупки к продажам</span>
@@ -108,6 +112,11 @@
             <div class="item-stats" id="itemStats">
                 <!-- Статистика по каждому типу вещей -->
             </div>
+        </section>
+
+        <!-- Секция инвентаря -->
+        <section id="inventory" class="tab-content">
+            <div id="inventoryGrid" class="inventory-grid"></div>
         </section>
 
         <!-- Секция календаря -->
