@@ -1038,6 +1038,32 @@ function renderCalendar() {
                         'Июль', 'Август', 'Сентябрь', 'Октябрь', 'Ноябрь', 'Декабрь'];
     
     document.getElementById('currentMonth').textContent = `${monthNames[month]} ${year}`;
+
+    const monthProfitEl = document.getElementById('currentMonthProfit');
+    if (monthProfitEl) {
+        const allProfits = calculateAllDaysProfitWithCarryover();
+        let monthProfit = 0;
+        let hasMonthData = false;
+
+        Object.entries(allProfits).forEach(([dateStr, info]) => {
+            if (!info || !info.hasData) return;
+            const d = new Date(dateStr);
+            if (d.getFullYear() === year && d.getMonth() === month) {
+                monthProfit += info.profit;
+                hasMonthData = true;
+            }
+        });
+
+        monthProfitEl.classList.remove('positive', 'negative', 'neutral');
+        if (hasMonthData) {
+            const sign = monthProfit >= 0 ? '+' : '−';
+            monthProfitEl.textContent = `Профит: ${sign}${formatMoney(Math.abs(monthProfit))}`;
+            monthProfitEl.classList.add(monthProfit >= 0 ? 'positive' : 'negative');
+        } else {
+            monthProfitEl.textContent = 'Профит: 0 ₽';
+            monthProfitEl.classList.add('neutral');
+        }
+    }
     
     const grid = document.getElementById('calendarGrid');
     // Удаляем старые дни, оставляя заголовки

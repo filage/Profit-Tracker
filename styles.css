@@ -631,6 +631,30 @@ input:checked + .slider:before {
     font-weight: 600;
 }
 
+.calendar-month-info {
+    text-align: center;
+}
+
+.month-profit {
+    margin-top: 4px;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-secondary);
+}
+
+.month-profit.positive {
+    color: var(--accent-green);
+}
+
+.month-profit.negative {
+    color: var(--accent-red);
+}
+
+.month-profit.neutral {
+    color: var(--text-secondary);
+    opacity: 0.8;
+}
+
 .btn-nav {
     width: 44px;
     height: 44px;
