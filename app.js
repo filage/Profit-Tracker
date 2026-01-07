@@ -99,6 +99,11 @@ let pendingItemImageType = null;
 
 let selectedPlatform = 'funpay';
 const PLATFORM_STORAGE_KEY = 'profitTrackerPlatform';
+const PLAYEROK_FEE_PERCENT_STORAGE_KEY = 'profitTrackerPlayerokFeePercent';
+const PLAYEROK_SETTINGS_OPEN_STORAGE_KEY = 'profitTrackerPlayerokSettingsOpen';
+
+let playerokFeePercent = 15;
+let isPlayerokSettingsOpen = false;
 
 // Загрузка данных из localStorage
 function loadData() {
@@ -136,6 +141,35 @@ function loadPlatformSelection() {
     }
 }
 
+function loadPlayerokFeePercent() {
+    const saved = localStorage.getItem(PLAYEROK_FEE_PERCENT_STORAGE_KEY);
+    const n = saved !== null ? parseFloat(saved) : NaN;
+    if (Number.isFinite(n) && n >= 0 && n <= 100) {
+        playerokFeePercent = n;
+    } else {
+        playerokFeePercent = 15;
+    }
+}
+
+function savePlayerokFeePercent(value) {
+    const n = parseFloat(value);
+    if (!Number.isFinite(n) || n < 0 || n > 100) return false;
+    playerokFeePercent = n;
+    localStorage.setItem(PLAYEROK_FEE_PERCENT_STORAGE_KEY, String(n));
+    return true;
+}
+
+function loadPlayerokSettingsOpen() {
+    const saved = localStorage.getItem(PLAYEROK_SETTINGS_OPEN_STORAGE_KEY);
+    isPlayerokSettingsOpen = saved === '1';
+}
+
+function setPlayerokSettingsOpen(open) {
+    isPlayerokSettingsOpen = !!open;
+    localStorage.setItem(PLAYEROK_SETTINGS_OPEN_STORAGE_KEY, isPlayerokSettingsOpen ? '1' : '0');
+    syncPlatformSettingsUi();
+}
+
 function getActivePlatform() {
     return selectedPlatform;
 }
@@ -157,6 +191,7 @@ function setActivePlatform(platform) {
     }
 
     syncSalePlatformUi();
+    syncPlatformSettingsUi();
 
     updateStats();
     updateChart();
@@ -165,6 +200,8 @@ function setActivePlatform(platform) {
 
 function initPlatformSwitch() {
     loadPlatformSelection();
+    loadPlayerokFeePercent();
+    loadPlayerokSettingsOpen();
     const switchEl = document.getElementById('platformSwitch');
     if (!switchEl) return;
 
@@ -188,7 +225,10 @@ function filterSalesByPlatform(sales, platform) {
 }
 
 function getPlatformCommissionMultiplier(platform) {
-    if (platform === 'playerok') return 0.85;
+    if (platform === 'playerok') {
+        const fee = Number.isFinite(playerokFeePercent) ? playerokFeePercent : 15;
+        return 1 - (fee / 100);
+    }
     return 0.97;
 }
 
@@ -309,6 +349,62 @@ function syncSalePlatformUi() {
     }
 }
 
+function syncPlatformSettingsUi() {
+    const active = getActivePlatform();
+    const setting = document.getElementById('playerokFeeSetting');
+    const input = document.getElementById('playerokFeePercent');
+    if (!setting) return;
+
+    const visible = (active === 'playerok' || active === 'overall') && isPlayerokSettingsOpen;
+    setting.classList.toggle('visible', visible);
+    if (input) {
+        input.value = String(playerokFeePercent);
+    }
+}
+
+function initPlatformSettings() {
+    const btn = document.getElementById('savePlayerokFeeBtn');
+    const input = document.getElementById('playerokFeePercent');
+    const gearBtn = document.getElementById('playerokSettingsBtn');
+    if (btn && input) {
+        btn.addEventListener('click', () => {
+            const ok = savePlayerokFeePercent(input.value);
+            if (!ok) {
+                alert('Введите корректный процент комиссии (0–100)');
+                return;
+            }
+            updateStats();
+            updateChart();
+            renderCalendar();
+        });
+    }
+
+    if (input) {
+        input.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                if (btn) btn.click();
+            }
+        });
+    }
+
+    if (gearBtn) {
+        const onToggle = (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            setPlayerokSettingsOpen(!isPlayerokSettingsOpen);
+        };
+        gearBtn.addEventListener('click', onToggle);
+        gearBtn.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+                onToggle(e);
+            }
+        });
+    }
+
+    syncPlatformSettingsUi();
+}
+
 // Сохранение данных в localStorage
 function saveData() {
     localStorage.setItem('profitTrackerData', JSON.stringify(data));
@@ -324,6 +420,7 @@ let currentDate = new Date();
 document.addEventListener('DOMContentLoaded', () => {
     loadData();
     initPlatformSwitch();
+    initPlatformSettings();
     initTabs();
     initModals();
     initForms();

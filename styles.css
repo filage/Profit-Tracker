@@ -42,8 +42,13 @@ body {
 
 /* Заголовок */
 .header {
+    --header-stack-gap: 16px;
     text-align: center;
-    margin-bottom: 30px;
+    margin-bottom: var(--header-stack-gap);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--header-stack-gap);
 }
 
 .header h1 {
@@ -58,11 +63,42 @@ body {
 .platform-switch {
     display: inline-flex;
     gap: 6px;
-    margin-top: 14px;
     background: var(--bg-secondary);
     padding: 6px;
     border-radius: 14px;
     border: 1px solid var(--border-color);
+}
+
+.platform-btn-label {
+    display: inline-flex;
+    align-items: center;
+}
+
+.platform-gear-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 22px;
+    height: 22px;
+    margin-left: 8px;
+    border-radius: 8px;
+    font-size: 14px;
+    line-height: 1;
+    cursor: pointer;
+    color: var(--text-secondary);
+    transition: all 0.25s ease;
+}
+
+.platform-btn:hover .platform-gear-btn {
+    color: var(--text-primary);
+}
+
+.platform-gear-btn:hover {
+    background: rgba(255, 255, 255, 0.06);
+}
+
+.platform-btn.active .platform-gear-btn {
+    color: rgba(255, 255, 255, 0.9);
 }
 
 .platform-btn {
@@ -86,6 +122,79 @@ body {
     background: var(--gradient-blue);
     color: #fff;
     box-shadow: var(--shadow);
+}
+
+.platform-settings {
+    margin-top: 0;
+    display: flex;
+    justify-content: center;
+}
+
+.platform-setting {
+    display: none;
+    align-items: center;
+    gap: 10px;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: 14px;
+    padding: 10px 12px;
+}
+
+.platform-setting-title {
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--text-secondary);
+    letter-spacing: 0.02em;
+}
+
+.platform-setting-controls {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.platform-setting-controls input {
+    width: 52px;
+    padding: 8px 10px;
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: 10px;
+    color: var(--text-primary);
+    font-weight: 700;
+    text-align: center;
+    outline: none;
+    appearance: textfield;
+}
+
+.platform-setting-controls input::-webkit-outer-spin-button,
+.platform-setting-controls input::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+}
+
+.platform-setting-controls input[type=number] {
+    appearance: textfield;
+    -moz-appearance: textfield;
+}
+
+.platform-setting-controls input:focus {
+    border-color: var(--accent-blue);
+    box-shadow: 0 0 0 3px rgba(74, 144, 217, 0.2);
+}
+
+.platform-setting-suffix {
+    color: var(--text-secondary);
+    font-weight: 700;
+    font-size: 12px;
+}
+
+#savePlayerokFeeBtn {
+    padding: 8px 14px;
+    min-width: 96px;
+}
+
+.platform-setting.visible {
+    display: inline-flex;
 }
 
 /* Навигация */

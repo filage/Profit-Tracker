@@ -14,8 +14,21 @@
             <h1>Трекер Прибыли</h1>
             <div class="platform-switch" id="platformSwitch">
                 <button class="platform-btn active" data-platform="funpay" type="button">FunPay</button>
-                <button class="platform-btn" data-platform="playerok" type="button">Playerok</button>
+                <button class="platform-btn" data-platform="playerok" type="button">
+                    <span class="platform-btn-label">Playerok</span>
+                    <span class="platform-gear-btn" id="playerokSettingsBtn" role="button" tabindex="0" aria-label="Настройки Playerok">⚙️</span>
+                </button>
                 <button class="platform-btn" data-platform="overall" type="button">Общий</button>
+            </div>
+            <div class="platform-settings" id="platformSettings">
+                <div class="platform-setting" id="playerokFeeSetting">
+                    <div class="platform-setting-title">Комиссия</div>
+                    <div class="platform-setting-controls">
+                        <input id="playerokFeePercent" type="number" min="0" max="100" step="0.1" inputmode="decimal" placeholder="15">
+                        <span class="platform-setting-suffix">%</span>
+                        <button id="savePlayerokFeeBtn" class="btn-small" type="button">Сохранить</button>
+                    </div>
+                </div>
             </div>
         </header>
 
