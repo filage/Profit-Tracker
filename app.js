@@ -97,6 +97,9 @@ let showPoints = true;
 
 let pendingItemImageType = null;
 
+let selectedPlatform = 'funpay';
+const PLATFORM_STORAGE_KEY = 'profitTrackerPlatform';
+
 // Загрузка данных из localStorage
 function loadData() {
     const saved = localStorage.getItem('profitTrackerData');
@@ -119,6 +122,191 @@ function loadData() {
     if (!Array.isArray(data.sales)) data.sales = [];
     if (!Array.isArray(data.rates)) data.rates = [];
     if (!data.itemImages || typeof data.itemImages !== 'object') data.itemImages = {};
+
+    // Совместимость со старыми/расширением: продажи без platform считаем FunPay
+    data.sales.forEach(s => {
+        if (s && !s.platform) s.platform = 'funpay';
+    });
+}
+
+function loadPlatformSelection() {
+    const saved = localStorage.getItem(PLATFORM_STORAGE_KEY);
+    if (saved === 'funpay' || saved === 'playerok' || saved === 'overall') {
+        selectedPlatform = saved;
+    }
+}
+
+function getActivePlatform() {
+    return selectedPlatform;
+}
+
+function setActivePlatform(platform) {
+    if (platform !== 'funpay' && platform !== 'playerok' && platform !== 'overall') return;
+    selectedPlatform = platform;
+    localStorage.setItem(PLATFORM_STORAGE_KEY, platform);
+
+    calendarProfitCache = null;
+    calendarProfitCacheKey = null;
+
+    // UI
+    const switchEl = document.getElementById('platformSwitch');
+    if (switchEl) {
+        switchEl.querySelectorAll('.platform-btn').forEach(btn => {
+            btn.classList.toggle('active', btn.dataset.platform === platform);
+        });
+    }
+
+    syncSalePlatformUi();
+
+    updateStats();
+    updateChart();
+    renderCalendar();
+}
+
+function initPlatformSwitch() {
+    loadPlatformSelection();
+    const switchEl = document.getElementById('platformSwitch');
+    if (!switchEl) return;
+
+    switchEl.querySelectorAll('.platform-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            setActivePlatform(btn.dataset.platform);
+        });
+    });
+
+    // первичная синхронизация
+    setActivePlatform(selectedPlatform);
+}
+
+function normalizeSalePlatform(sale) {
+    return (sale && sale.platform) ? sale.platform : 'funpay';
+}
+
+function filterSalesByPlatform(sales, platform) {
+    if (platform === 'overall') return sales;
+    return sales.filter(s => normalizeSalePlatform(s) === platform);
+}
+
+function getPlatformCommissionMultiplier(platform) {
+    if (platform === 'playerok') return 0.85;
+    return 0.97;
+}
+
+function getSalesForActivePlatform() {
+    return filterSalesByPlatform(data.sales || [], getActivePlatform());
+}
+
+function getAllKnownItemTypesUpTo(maxDateStr) {
+    const set = new Set();
+    (data.itemTypes || []).forEach(t => {
+        if (t) set.add(t);
+    });
+    (data.purchases || []).forEach(p => {
+        if (!p || !p.itemType) return;
+        if (maxDateStr && p.date > maxDateStr) return;
+        set.add(p.itemType);
+    });
+    (data.sales || []).forEach(s => {
+        if (!s || !s.itemType) return;
+        if (maxDateStr && s.date > maxDateStr) return;
+        set.add(s.itemType);
+    });
+    return [...set];
+}
+
+function calculatePurchaseAllocationForTypes(types, maxDateStr) {
+    const purchases = (data.purchases || [])
+        .filter(p => types.includes(p.itemType) && (!maxDateStr || p.date <= maxDateStr));
+
+    const sales = (data.sales || [])
+        .filter(s => types.includes(s.itemType) && (!maxDateStr || s.date <= maxDateStr));
+
+    const carryover = {};
+    types.forEach(type => {
+        carryover[type] = [];
+    });
+
+    const byPurchaseId = {};
+    const purchaseById = {};
+    const costPerUnitById = {};
+
+    const allDates = [...new Set([
+        ...purchases.map(p => p.date),
+        ...sales.map(s => s.date)
+    ])].sort();
+
+    allDates.forEach(dateStr => {
+        const dayPurchases = purchases
+            .filter(p => p.date === dateStr)
+            .sort(sortByDateTime);
+
+        dayPurchases.forEach(p => {
+            purchaseById[p.id] = p;
+            costPerUnitById[p.id] = getAmountInRub(p) / p.quantity;
+            if (!byPurchaseId[p.id]) byPurchaseId[p.id] = { funpay: 0, playerok: 0 };
+
+            if (!carryover[p.itemType]) carryover[p.itemType] = [];
+            carryover[p.itemType].push({ purchaseId: p.id, qty: p.quantity });
+        });
+
+        const daySales = sales
+            .filter(s => s.date === dateStr)
+            .sort(sortByDateTime);
+
+        daySales.forEach(s => {
+            const type = s.itemType;
+            let remainingToSell = s.quantity;
+            const platform = normalizeSalePlatform(s);
+
+            if (!carryover[type]) carryover[type] = [];
+
+            while (remainingToSell > 0 && carryover[type].length > 0) {
+                const oldest = carryover[type][0];
+                const takeQty = Math.min(oldest.qty, remainingToSell);
+
+                if (!byPurchaseId[oldest.purchaseId]) byPurchaseId[oldest.purchaseId] = { funpay: 0, playerok: 0 };
+                if (platform === 'playerok') {
+                    byPurchaseId[oldest.purchaseId].playerok += takeQty;
+                } else {
+                    byPurchaseId[oldest.purchaseId].funpay += takeQty;
+                }
+
+                oldest.qty -= takeQty;
+                remainingToSell -= takeQty;
+                if (oldest.qty <= 0) {
+                    carryover[type].shift();
+                }
+            }
+        });
+    });
+
+    return { byPurchaseId, purchaseById, costPerUnitById };
+}
+
+function getEffectivePurchaseQtyForPlatform(purchase, allocation, platform) {
+    if (platform === 'overall') return purchase.quantity;
+
+    const byId = (allocation && allocation.byPurchaseId) ? allocation.byPurchaseId : {};
+    const consumed = byId[purchase.id] || { funpay: 0, playerok: 0 };
+    const totalConsumed = (consumed.funpay || 0) + (consumed.playerok || 0);
+    const remaining = Math.max(0, purchase.quantity - totalConsumed);
+    const platformConsumed = platform === 'playerok' ? (consumed.playerok || 0) : (consumed.funpay || 0);
+
+    return platformConsumed + remaining;
+}
+
+function syncSalePlatformUi() {
+    const platform = getActivePlatform();
+    const group = document.getElementById('salePlatformGroup');
+    const select = document.getElementById('salePlatform');
+    if (group && select) {
+        if (platform === 'overall') {
+            group.style.display = '';
+        } else {
+            group.style.display = 'none';
+            select.value = platform;
+        }
+    }
 }
 
 // Сохранение данных в localStorage
@@ -135,6 +323,7 @@ let currentDate = new Date();
 // Инициализация
 document.addEventListener('DOMContentLoaded', () => {
     loadData();
+    initPlatformSwitch();
     initTabs();
     initModals();
     initForms();
@@ -272,6 +461,10 @@ function importData(e) {
                     rates: imported.rates || [],
                     itemImages: imported.itemImages || {}
                 };
+
+                (data.sales || []).forEach(s => {
+                    if (s && !s.platform) s.platform = 'funpay';
+                });
                 
                 saveData();
                 updateItemTypeSelects();
@@ -304,6 +497,7 @@ function initModals() {
     document.getElementById('addSaleBtn').addEventListener('click', () => {
         document.getElementById('saleDate').valueAsDate = new Date();
         document.getElementById('saleTime').value = getNowTimeHHMM();
+        syncSalePlatformUi();
         document.getElementById('saleModal').classList.remove('hidden');
     });
     
@@ -383,6 +577,11 @@ function initForms() {
         const currency = document.getElementById('saleCurrency').value;
         const quantity = parseInt(document.getElementById('saleQuantity').value);
         const amount = parseFloat(document.getElementById('saleAmount').value);
+
+        const activePlatform = getActivePlatform();
+        const platform = activePlatform === 'overall'
+            ? document.getElementById('salePlatform').value
+            : activePlatform;
         
         // Цена за 1 шт. * количество = общая сумма
         const totalAmount = amount * quantity;
@@ -394,7 +593,8 @@ function initForms() {
             originalAmount: totalAmount,
             quantity,
             date: saleDate,
-            time: saleTime
+            time: saleTime,
+            platform
         });
         
         saveData();
@@ -450,6 +650,7 @@ function initForms() {
         const newCurrency = document.getElementById('editTxCurrency').value;
         const newPricePerUnit = parseFloat(document.getElementById('editTxAmount').value);
         const newQty = parseInt(document.getElementById('editTxQuantity').value, 10);
+        const newPlatform = document.getElementById('editTxPlatform') ? document.getElementById('editTxPlatform').value : 'funpay';
         
         if (!newItemType) {
             alert('Выберите тип вещи');
@@ -479,6 +680,10 @@ function initForms() {
         tx.currency = newCurrency;
         tx.originalAmount = newPricePerUnit * newQty;
         tx.quantity = newQty;
+
+        if (transType === 'income') {
+            tx.platform = newPlatform || 'funpay';
+        }
         
         saveData();
         updateStats();
@@ -720,7 +925,8 @@ function getAmountInRub(transaction) {
 }
 
 function getSaleAmountInRub(sale) {
-    return getAmountInRub(sale) * 0.97;
+    const platform = normalizeSalePlatform(sale);
+    return getAmountInRub(sale) * getPlatformCommissionMultiplier(platform);
 }
 
 // Форматировать дату в YYYY-MM-DD (локальное время)
@@ -760,6 +966,7 @@ function getSelectedTypes() {
 }
 
 function calculatePeriodTotalsWithCarryover(types, dateFrom, dateTo) {
+    const platform = getActivePlatform();
     const carryover = {};
     types.forEach(type => {
         carryover[type] = [];
@@ -798,12 +1005,14 @@ function calculatePeriodTotalsWithCarryover(types, dateFrom, dateTo) {
             daySales.forEach(s => {
                 let remainingToSell = s.quantity;
                 const saleUnitPrice = getSaleAmountInRub(s) / s.quantity;
+                const salePlatform = normalizeSalePlatform(s);
                 while (remainingToSell > 0 && carryover[type].length > 0) {
                     const oldest = carryover[type][0];
                     const takeQty = Math.min(oldest.qty, remainingToSell);
                     const isInRange = dateStr >= dateFrom && dateStr <= dateTo;
+                    const platformMatches = platform === 'overall' || salePlatform === platform;
 
-                    if (isInRange) {
+                    if (isInRange && platformMatches) {
                         matchedQtyInRange += takeQty;
                         totalIncome += takeQty * saleUnitPrice;
                         totalExpense += takeQty * oldest.costPerUnit;
@@ -823,6 +1032,7 @@ function calculatePeriodTotalsWithCarryover(types, dateFrom, dateTo) {
 }
 
 function calculateAllDaysProfitWithCarryoverForTypes(types, maxDateStr) {
+    const platform = getActivePlatform();
     const carryover = {};
     types.forEach(type => {
         carryover[type] = [];
@@ -862,12 +1072,16 @@ function calculateAllDaysProfitWithCarryoverForTypes(types, maxDateStr) {
             daySales.forEach(s => {
                 let remainingToSell = s.quantity;
                 const saleUnitPrice = getSaleAmountInRub(s) / s.quantity;
+                const salePlatform = normalizeSalePlatform(s);
+                const platformMatches = platform === 'overall' || salePlatform === platform;
                 while (remainingToSell > 0 && carryover[type].length > 0) {
                     const oldest = carryover[type][0];
                     const takeQty = Math.min(oldest.qty, remainingToSell);
 
-                    dayIncome += takeQty * saleUnitPrice;
-                    dayExpense += takeQty * oldest.costPerUnit;
+                    if (platformMatches) {
+                        dayIncome += takeQty * saleUnitPrice;
+                        dayExpense += takeQty * oldest.costPerUnit;
+                    }
 
                     oldest.qty -= takeQty;
                     remainingToSell -= takeQty;
@@ -898,8 +1112,8 @@ function updateStats() {
         : data.purchases.filter(p => p.itemType === filterType);
     
     let sales = filterType === 'all' 
-        ? [...data.sales] 
-        : data.sales.filter(s => s.itemType === filterType);
+        ? [...getSalesForActivePlatform()] 
+        : getSalesForActivePlatform().filter(s => s.itemType === filterType);
     
     // Фильтрация по датам (всегда применяется)
     purchases = purchases.filter(p => p.date >= dateFrom && p.date <= dateTo);
@@ -926,8 +1140,18 @@ function updateStats() {
         displayBought = totals.matchedQtyInRange;
         displaySold = totals.matchedQtyInRange;
     } else {
-        totalExpense = purchases.reduce((sum, p) => sum + getAmountInRub(p), 0);
+        const platform = getActivePlatform();
+        const types = filterType === 'all' ? getAllKnownItemTypesUpTo(dateTo) : [filterType];
+        const allocation = calculatePurchaseAllocationForTypes(types, dateTo);
+
+        totalBought = purchases.reduce((sum, p) => sum + getEffectivePurchaseQtyForPlatform(p, allocation, platform), 0);
+        totalExpense = purchases.reduce((sum, p) => {
+            const qty = getEffectivePurchaseQtyForPlatform(p, allocation, platform);
+            const costPerUnit = getAmountInRub(p) / p.quantity;
+            return sum + (qty * costPerUnit);
+        }, 0);
         totalIncome = totalSaleAmount;
+        displayBought = totalBought;
     }
     
     let profit = totalIncome - totalExpense;
@@ -966,16 +1190,23 @@ function renderItemStats(equalize) {
             boughtAmount = totals.totalExpense;
             soldAmount = totals.totalIncome;
         } else {
-            let purchases = data.purchases.filter(p => p.itemType === type);
-            let sales = data.sales.filter(s => s.itemType === type);
+            const platform = getActivePlatform();
+            const allocation = calculatePurchaseAllocationForTypes([type], dateTo);
+
+            let purchases = (data.purchases || []).filter(p => p.itemType === type);
+            let sales = getSalesForActivePlatform().filter(s => s.itemType === type);
             
             purchases = purchases.filter(p => p.date >= dateFrom && p.date <= dateTo);
             sales = sales.filter(s => s.date >= dateFrom && s.date <= dateTo);
             
-            bought = purchases.reduce((sum, p) => sum + p.quantity, 0);
+            bought = purchases.reduce((sum, p) => sum + getEffectivePurchaseQtyForPlatform(p, allocation, platform), 0);
             sold = sales.reduce((sum, s) => sum + s.quantity, 0);
             
-            boughtAmount = purchases.reduce((sum, p) => sum + getAmountInRub(p), 0);
+            boughtAmount = purchases.reduce((sum, p) => {
+                const qty = getEffectivePurchaseQtyForPlatform(p, allocation, platform);
+                const costPerUnit = getAmountInRub(p) / p.quantity;
+                return sum + (qty * costPerUnit);
+            }, 0);
             soldAmount = sales.reduce((sum, s) => sum + getSaleAmountInRub(s), 0);
         }
         
@@ -1140,21 +1371,22 @@ function sortByDateTime(a, b) {
 function calculateAllDaysProfitWithCarryover() {
     // Ключ для кэша
     const cacheKey = JSON.stringify({
-        sales: data.sales.map(s => s.id + s.date + s.time),
-        purchases: data.purchases.map(p => p.id + p.date + p.time),
+        sales: (data.sales || []).map(s => s.id + s.date + (s.time || '') + normalizeSalePlatform(s)),
+        purchases: (data.purchases || []).map(p => p.id + p.date + (p.time || '')),
         rates: data.rates
     });
     
     if (calendarProfitCacheKey === cacheKey && calendarProfitCache) {
-        return calendarProfitCache;
+        const platform = getActivePlatform();
+        return (calendarProfitCache && calendarProfitCache[platform]) ? calendarProfitCache[platform] : {};
     }
     
-    const result = {};
+    const resultByPlatform = { funpay: {}, playerok: {}, overall: {} };
     
     // Собираем все уникальные даты и сортируем
     const allDates = [...new Set([
-        ...data.sales.map(s => s.date),
-        ...data.purchases.map(p => p.date)
+        ...(data.sales || []).map(s => s.date),
+        ...(data.purchases || []).map(p => p.date)
     ])].sort();
     
     // Остаток покупок по типам (очередь FIFO с датой+временем)
@@ -1173,8 +1405,8 @@ function calculateAllDaysProfitWithCarryover() {
     const carryoverByDate = {};
     
     allDates.forEach(dateStr => {
-        let dayIncome = 0;
-        let dayExpense = 0;
+        const dayIncome = { funpay: 0, playerok: 0, overall: 0 };
+        const dayExpense = { funpay: 0, playerok: 0, overall: 0 };
         
         // Сохраняем состояние очереди на начало дня (для отображения переносов)
         carryoverByDate[dateStr] = {};
@@ -1208,21 +1440,25 @@ function calculateAllDaysProfitWithCarryover() {
                 .filter(s => s.date === dateStr && s.itemType === type)
                 .sort(sortByDateTime);
             
-            const soldQty = daySales.reduce((sum, s) => sum + s.quantity, 0);
-            const soldAmount = daySales.reduce((sum, s) => sum + getSaleAmountInRub(s), 0);
-            
-            if (soldQty > 0) {
-                dayIncome += soldAmount;
-                
-                // Списываем из очереди покупок (FIFO - самые старые первые)
-                let remainingToSell = soldQty;
+            daySales.forEach(sale => {
+                let remainingToSell = sale.quantity;
+                const salePlatform = normalizeSalePlatform(sale);
+                const saleUnitNet = sale.quantity ? (getSaleAmountInRub(sale) / sale.quantity) : 0;
+
                 while (remainingToSell > 0 && carryover[type].length > 0) {
                     const oldest = carryover[type][0];
                     const takeQty = Math.min(oldest.qty, remainingToSell);
-                    dayExpense += takeQty * oldest.costPerUnit;
+                    const expense = takeQty * oldest.costPerUnit;
+                    const income = takeQty * saleUnitNet;
+
+                    dayIncome[salePlatform] += income;
+                    dayExpense[salePlatform] += expense;
+                    dayIncome.overall += income;
+                    dayExpense.overall += expense;
+
                     oldest.qty -= takeQty;
                     remainingToSell -= takeQty;
-                    
+
                     // Отмечаем что эта покупка использована В ЭТОТ ДЕНЬ
                     if (!usedPurchases[oldest.id]) {
                         usedPurchases[oldest.id] = { totalUsed: 0, byDate: {} };
@@ -1232,24 +1468,27 @@ function calculateAllDaysProfitWithCarryover() {
                     }
                     usedPurchases[oldest.id].totalUsed += takeQty;
                     usedPurchases[oldest.id].byDate[dateStr] += takeQty;
-                    
+
                     if (oldest.qty <= 0) {
                         carryover[type].shift();
                     }
                 }
+            });
+        });
+
+        ['funpay', 'playerok', 'overall'].forEach(p => {
+            if (dayIncome[p] !== 0 || dayExpense[p] !== 0) {
+                resultByPlatform[p][dateStr] = { hasData: true, profit: dayIncome[p] - dayExpense[p] };
             }
         });
-        
-        if (dayIncome !== 0 || dayExpense !== 0) {
-            result[dateStr] = { hasData: true, profit: dayIncome - dayExpense };
-        }
     });
     
     // Сохраняем состояние для отображения в деталях дня
     calendarCarryoverState = { usedPurchases, carryover, carryoverByDate };
-    calendarProfitCache = result;
+    calendarProfitCache = resultByPlatform;
     calendarProfitCacheKey = cacheKey;
-    return result;
+    const platform = getActivePlatform();
+    return (calendarProfitCache && calendarProfitCache[platform]) ? calendarProfitCache[platform] : {};
 }
 
 // Календарь ВСЕГДА использует приравнивание
@@ -1271,7 +1510,7 @@ function showDayDetails(dateStr) {
     const container = document.getElementById('dayTransactions');
     container.innerHTML = '';
     
-    const daySales = data.sales.filter(s => s.date === dateStr);
+    const daySales = getSalesForActivePlatform().filter(s => s.date === dateStr);
     const dayPurchases = data.purchases.filter(p => p.date === dateStr);
     
     // Убедимся что кэш рассчитан
@@ -1376,6 +1615,18 @@ function showDayDetails(dateStr) {
             const arr = transType === 'income' ? data.sales : data.purchases;
             const tx = arr.find(t => String(t.id) === idStr);
             if (!tx) return;
+
+            const platformGroup = document.getElementById('editTxPlatformGroup');
+            const platformSelect = document.getElementById('editTxPlatform');
+            if (platformGroup && platformSelect) {
+                if (transType === 'income') {
+                    platformGroup.style.display = '';
+                    platformSelect.value = normalizeSalePlatform(tx);
+                } else {
+                    platformGroup.style.display = 'none';
+                    platformSelect.value = 'funpay';
+                }
+            }
             
             // Заполняем select типов вещей
             const itemTypeSelect = document.getElementById('editTxItemType');
@@ -1630,20 +1881,26 @@ function updateChart() {
 
     const maxDateStr = dateStrs.length > 0 ? dateStrs[dateStrs.length - 1] : null;
     const profitByDate = equalize ? calculateAllDaysProfitWithCarryoverForTypes(types, maxDateStr) : null;
+    const purchaseAllocation = !equalize ? calculatePurchaseAllocationForTypes(types, maxDateStr) : null;
 
     dateStrs.forEach(dateStr => {
         let profit = 0;
         if (equalize) {
             profit = (profitByDate && profitByDate[dateStr]) ? profitByDate[dateStr].profit : 0;
         } else {
-            const daySales = data.sales.filter(s => types.includes(s.itemType) && s.date === dateStr);
-            const dayPurchases = data.purchases.filter(p => types.includes(p.itemType) && p.date === dateStr);
+            const daySales = getSalesForActivePlatform().filter(s => types.includes(s.itemType) && s.date === dateStr);
+            const dayPurchases = (data.purchases || []).filter(p => types.includes(p.itemType) && p.date === dateStr);
             const dayIncome = daySales.reduce((sum, s) => sum + getSaleAmountInRub(s), 0);
-            const dayExpense = dayPurchases.reduce((sum, p) => sum + getAmountInRub(p), 0);
+            const platform = getActivePlatform();
+            const dayExpense = dayPurchases.reduce((sum, p) => {
+                const qty = getEffectivePurchaseQtyForPlatform(p, purchaseAllocation, platform);
+                const costPerUnit = getAmountInRub(p) / p.quantity;
+                return sum + (qty * costPerUnit);
+            }, 0);
             profit = dayIncome - dayExpense;
         }
 
-        const qty = data.sales
+        const qty = getSalesForActivePlatform()
             .filter(s => types.includes(s.itemType) && s.date === dateStr)
             .reduce((sum, s) => sum + s.quantity, 0);
 
@@ -1691,27 +1948,53 @@ function showDetails(type, filterItemType = null) {
     
     let transactions = [];
     let titleText = '';
+
+    const activePlatform = getActivePlatform();
+    const applyPlatformToPurchases = (purchasesArr) => {
+        if (activePlatform === 'overall') return purchasesArr;
+
+        const maxDateStr = null;
+        const types = filterItemType ? [filterItemType] : getAllKnownItemTypesUpTo(maxDateStr);
+        const allocation = calculatePurchaseAllocationForTypes(types, maxDateStr);
+
+        return purchasesArr
+            .map(p => {
+                const qty = getEffectivePurchaseQtyForPlatform(p, allocation, activePlatform);
+                if (!Number.isFinite(qty) || qty <= 0) return null;
+                const ratio = p.quantity > 0 ? (qty / p.quantity) : 0;
+                return {
+                    ...p,
+                    quantity: qty,
+                    originalAmount: p.originalAmount * ratio,
+                    _effectiveQty: qty
+                };
+            })
+            .filter(Boolean);
+    };
     
     if (type === 'income') {
         titleText = filterItemType ? `Продажи: ${filterItemType}` : 'Все продажи';
         transactions = filterItemType 
-            ? data.sales.filter(s => s.itemType === filterItemType)
-            : [...data.sales];
+            ? getSalesForActivePlatform().filter(s => s.itemType === filterItemType)
+            : [...getSalesForActivePlatform()];
         transactions = transactions.map(t => ({ ...t, transType: 'income' }));
     } else if (type === 'expense') {
         titleText = filterItemType ? `Покупки: ${filterItemType}` : 'Все покупки';
-        transactions = filterItemType 
-            ? data.purchases.filter(p => p.itemType === filterItemType)
-            : [...data.purchases];
+        const rawPurchases = filterItemType 
+            ? (data.purchases || []).filter(p => p.itemType === filterItemType)
+            : [...(data.purchases || [])];
+        const purchases = applyPlatformToPurchases(rawPurchases);
+        transactions = purchases;
         transactions = transactions.map(t => ({ ...t, transType: 'expense' }));
     } else if (type === 'all') {
         titleText = filterItemType ? `Все операции: ${filterItemType}` : 'Все операции';
         const sales = (filterItemType 
-            ? data.sales.filter(s => s.itemType === filterItemType)
-            : [...data.sales]).map(t => ({ ...t, transType: 'income' }));
-        const purchases = (filterItemType 
-            ? data.purchases.filter(p => p.itemType === filterItemType)
-            : [...data.purchases]).map(t => ({ ...t, transType: 'expense' }));
+            ? getSalesForActivePlatform().filter(s => s.itemType === filterItemType)
+            : [...getSalesForActivePlatform()]).map(t => ({ ...t, transType: 'income' }));
+        const rawPurchases = (filterItemType 
+            ? (data.purchases || []).filter(p => p.itemType === filterItemType)
+            : [...(data.purchases || [])]);
+        const purchases = applyPlatformToPurchases(rawPurchases).map(t => ({ ...t, transType: 'expense' }));
         transactions = [...sales, ...purchases];
     }
     
@@ -1817,6 +2100,18 @@ function showDetails(type, filterItemType = null) {
                 const arr = transType === 'income' ? data.sales : data.purchases;
                 const tx = arr.find(tr => String(tr.id) === idStr);
                 if (!tx) return;
+
+                const platformGroup = document.getElementById('editTxPlatformGroup');
+                const platformSelect = document.getElementById('editTxPlatform');
+                if (platformGroup && platformSelect) {
+                    if (transType === 'income') {
+                        platformGroup.style.display = '';
+                        platformSelect.value = normalizeSalePlatform(tx);
+                    } else {
+                        platformGroup.style.display = 'none';
+                        platformSelect.value = 'funpay';
+                    }
+                }
                 
                 // Заполняем select типов вещей
                 const itemTypeSelect = document.getElementById('editTxItemType');
